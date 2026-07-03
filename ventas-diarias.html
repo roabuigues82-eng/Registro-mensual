@@ -1,0 +1,480 @@
+<div id="app-root"></div>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+  :root {
+    --ink: #12151a;
+    --ink-soft: #1b2028;
+    --paper: #f4f0e4;
+    --paper-dim: #e8e2d0;
+    --text-hi: #f2efe6;
+    --text-lo: #9aa0ab;
+    --accent: #35a373;
+    --accent-dim: #244a3b;
+    --danger: #c4544b;
+    --rule: #2a2f38;
+  }
+
+  * { box-sizing: border-box; }
+
+  #app-root {
+    background: var(--ink);
+    color: var(--text-hi);
+    font-family: 'Manrope', sans-serif;
+    min-height: 100%;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+  }
+
+  .app-shell {
+    width: 100%;
+    max-width: 440px;
+    padding: 28px 18px 100px;
+  }
+
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 4px;
+  }
+
+  h1 {
+    font-size: 26px;
+    font-weight: 800;
+    margin: 0 0 20px;
+    letter-spacing: -0.01em;
+  }
+
+  .month-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+
+  .month-nav button {
+    background: var(--ink-soft);
+    border: 1px solid var(--rule);
+    color: var(--text-hi);
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .month-nav button:active { transform: scale(0.95); }
+
+  .month-label {
+    font-weight: 700;
+    font-size: 16px;
+    text-transform: capitalize;
+  }
+
+  .summary-card {
+    background: linear-gradient(160deg, var(--accent-dim), var(--ink-soft));
+    border: 1px solid var(--rule);
+    border-radius: 18px;
+    padding: 20px 20px 16px;
+    margin-bottom: 22px;
+  }
+
+  .summary-total-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-lo);
+  }
+
+  .summary-total {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 40px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    margin: 4px 0 14px;
+    color: var(--text-hi);
+  }
+
+  .summary-row {
+    display: flex;
+    gap: 22px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-lo);
+  }
+  .summary-row b { color: var(--text-hi); font-weight: 600; }
+
+  .entry-form {
+    background: var(--ink-soft);
+    border: 1px solid var(--rule);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 24px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  .field { flex: 1; }
+  .field label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-lo);
+    margin-bottom: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.05em;
+  }
+  .field input {
+    width: 100%;
+    background: var(--ink);
+    border: 1px solid var(--rule);
+    color: var(--text-hi);
+    padding: 10px 10px;
+    border-radius: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 15px;
+  }
+  .field input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .btn-save {
+    background: var(--accent);
+    color: #08130e;
+    border: none;
+    font-weight: 800;
+    padding: 11px 16px;
+    border-radius: 10px;
+    font-size: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-save:disabled { opacity: 0.5; cursor: default; }
+  .btn-save:active { transform: scale(0.97); }
+
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-lo);
+    margin: 0 0 10px 4px;
+  }
+
+  .ticket {
+    position: relative;
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 4px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 6px 14px -8px rgba(0,0,0,0.5);
+  }
+  .ticket::before, .ticket::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0;
+    height: 6px;
+    background:
+      radial-gradient(circle at 6px 3px, var(--ink) 3px, transparent 3.5px) repeat-x;
+    background-size: 12px 6px;
+  }
+  .ticket::before { top: -3px; }
+  .ticket::after { bottom: -3px; transform: rotate(180deg); }
+
+  .ticket-date {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .ticket-weekday {
+    font-size: 10px;
+    color: #6b6555;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 1px;
+  }
+  .ticket-amount {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
+  }
+  .ticket-del {
+    background: none;
+    border: none;
+    color: var(--danger);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 0 4px 12px;
+    line-height: 1;
+  }
+
+  .empty-state {
+    text-align: center;
+    color: var(--text-lo);
+    font-size: 13px;
+    padding: 30px 10px;
+    border: 1px dashed var(--rule);
+    border-radius: 14px;
+  }
+
+  .export-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    display: flex;
+    justify-content: center;
+    padding: 14px 18px;
+    background: linear-gradient(to top, var(--ink) 60%, transparent);
+  }
+  .btn-export {
+    width: 100%;
+    max-width: 404px;
+    background: var(--text-hi);
+    color: var(--ink);
+    border: none;
+    padding: 14px;
+    border-radius: 12px;
+    font-weight: 800;
+    font-size: 14px;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+  }
+  .btn-export:active { transform: scale(0.98); }
+  .btn-export:disabled { opacity: 0.4; }
+
+  .toast {
+    position: fixed;
+    top: 18px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent);
+    color: #08130e;
+    padding: 9px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    z-index: 50;
+  }
+</style>
+
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const DIAS = ["dom","lun","mar","mié","jue","vie","sáb"];
+
+function pad(n){ return String(n).padStart(2,"0"); }
+function monthKey(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}`; }
+function todayISO(){
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+function fmtEUR(n){
+  return new Intl.NumberFormat('es-ES', {style:'currency', currency:'EUR'}).format(n || 0);
+}
+
+function App(){
+  const [cursor, setCursor] = useState(new Date());
+  const [entries, setEntries] = useState(null); // {"01": 123.45, ...}
+  const [loading, setLoading] = useState(true);
+  const [dateVal, setDateVal] = useState(todayISO());
+  const [amountVal, setAmountVal] = useState("");
+  const [toast, setToast] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const key = monthKey(cursor);
+
+  const loadMonth = useCallback(async (mkey) => {
+    setLoading(true);
+    try {
+      const res = await window.storage.get(`ventas:${mkey}`);
+      setEntries(res && res.value ? JSON.parse(res.value) : {});
+    } catch (e) {
+      setEntries({});
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadMonth(key); }, [key, loadMonth]);
+
+  function showToast(msg){
+    setToast(msg);
+    setTimeout(() => setToast(null), 1800);
+  }
+
+  async function saveEntry(e){
+    e.preventDefault();
+    if (!dateVal || !amountVal) return;
+    const [y, m, d] = dateVal.split("-");
+    if (`${y}-${m}` !== key) {
+      // switch view to the month being edited
+      const newCursor = new Date(Number(y), Number(m)-1, 1);
+      setCursor(newCursor);
+    }
+    setSaving(true);
+    try {
+      const mkey = `${y}-${m}`;
+      const current = mkey === key ? entries : (JSON.parse((await window.storage.get(`ventas:${mkey}`).catch(()=>null))?.value || "{}"));
+      const updated = { ...current, [d]: parseFloat(amountVal) };
+      const result = await window.storage.set(`ventas:${mkey}`, JSON.stringify(updated));
+      if (!result) throw new Error("fallo al guardar");
+      if (mkey === key) setEntries(updated);
+      setAmountVal("");
+      showToast("Guardado");
+    } catch (err) {
+      showToast("Error al guardar");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteEntry(day){
+    const updated = { ...entries };
+    delete updated[day];
+    try {
+      await window.storage.set(`ventas:${key}`, JSON.stringify(updated));
+      setEntries(updated);
+    } catch (err) {
+      showToast("Error al borrar");
+    }
+  }
+
+  function changeMonth(delta){
+    const next = new Date(cursor.getFullYear(), cursor.getMonth() + delta, 1);
+    setCursor(next);
+  }
+
+  const sortedDays = useMemo(() => {
+    if (!entries) return [];
+    return Object.keys(entries).sort((a,b) => Number(b) - Number(a));
+  }, [entries]);
+
+  const total = useMemo(() => {
+    if (!entries) return 0;
+    return Object.values(entries).reduce((s, v) => s + Number(v), 0);
+  }, [entries]);
+
+  const numDays = sortedDays.length;
+  const avg = numDays ? total / numDays : 0;
+
+  async function exportMonth(){
+    if (!numDays) return;
+    setExporting(true);
+    try {
+      const [y, m] = key.split("-");
+      const rows = sortedDays
+        .slice()
+        .sort((a,b) => Number(a) - Number(b))
+        .map(day => {
+          const iso = `${y}-${m}-${day}`;
+          const dateObj = new Date(Number(y), Number(m)-1, Number(day));
+          return {
+            "Fecha": `${day}/${m}/${y}`,
+            "Día": DIAS[dateObj.getDay()],
+            "Total ventas (€)": Number(entries[day])
+          };
+        });
+      rows.push({ "Fecha": "", "Día": "TOTAL", "Total ventas (€)": Number(total.toFixed(2)) });
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [{wch:12},{wch:8},{wch:16}];
+      const wb = XLSX.utils.book_new();
+      const sheetName = `${MESES[Number(m)-1].slice(0,3)} ${y}`;
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      XLSX.writeFile(wb, `resumen_ventas_${y}-${m}.xlsx`);
+      showToast("Excel generado");
+    } catch (err) {
+      showToast("Error al exportar");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <div className="app-shell">
+      <p className="eyebrow">Registro diario</p>
+      <h1>Ventas del día</h1>
+
+      <div className="month-nav">
+        <button onClick={() => changeMonth(-1)} aria-label="Mes anterior">‹</button>
+        <div className="month-label">{MESES[cursor.getMonth()]} {cursor.getFullYear()}</div>
+        <button onClick={() => changeMonth(1)} aria-label="Mes siguiente">›</button>
+      </div>
+
+      <div className="summary-card">
+        <div className="summary-total-label">Total del mes</div>
+        <div className="summary-total">{loading ? "…" : fmtEUR(total)}</div>
+        <div className="summary-row">
+          <span>Días registrados: <b>{loading ? "-" : numDays}</b></span>
+          <span>Media/día: <b>{loading ? "-" : fmtEUR(avg)}</b></span>
+        </div>
+      </div>
+
+      <form className="entry-form" onSubmit={saveEntry}>
+        <div className="field">
+          <label htmlFor="f-date">Fecha</label>
+          <input id="f-date" type="date" value={dateVal} max={todayISO()}
+                 onChange={e => setDateVal(e.target.value)} required />
+        </div>
+        <div className="field">
+          <label htmlFor="f-amount">Total (€)</label>
+          <input id="f-amount" type="number" step="0.01" min="0" inputMode="decimal"
+                 placeholder="0,00" value={amountVal}
+                 onChange={e => setAmountVal(e.target.value)} required />
+        </div>
+        <button className="btn-save" type="submit" disabled={saving}>
+          {saving ? "..." : "Guardar"}
+        </button>
+      </form>
+
+      <p className="section-label">Este mes</p>
+
+      {loading ? (
+        <div className="empty-state">Cargando…</div>
+      ) : sortedDays.length === 0 ? (
+        <div className="empty-state">Todavía no hay ventas registradas este mes.</div>
+      ) : (
+        sortedDays.map(day => {
+          const [y, m] = key.split("-");
+          const dateObj = new Date(Number(y), Number(m)-1, Number(day));
+          return (
+            <div className="ticket" key={day}>
+              <div>
+                <div className="ticket-date">{day}/{m}/{y}</div>
+                <div className="ticket-weekday">{DIAS[dateObj.getDay()]}</div>
+              </div>
+              <div style={{display:"flex", alignItems:"center"}}>
+                <div className="ticket-amount">{fmtEUR(entries[day])}</div>
+                <button className="ticket-del" onClick={() => deleteEntry(day)} aria-label="Borrar">✕</button>
+              </div>
+            </div>
+          );
+        })
+      )}
+
+      <div className="export-bar">
+        <button className="btn-export" onClick={exportMonth} disabled={exporting || numDays === 0}>
+          {exporting ? "Generando…" : `Exportar resumen de ${MESES[cursor.getMonth()]} a Excel`}
+        </button>
+      </div>
+
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('app-root')).render(<App />);
+</script>
