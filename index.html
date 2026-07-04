@@ -319,26 +319,40 @@ function fmtEUR(n){
 function extractTotal(text){
   const numRegex = /\d{1,3}(?:[.,]\d{3})*[.,]\d{2}/g;
   const lines = text.split('\n');
-  let candidates = [];
-  lines.forEach(line => {
-    if (/total/i.test(line) && !/subtotal/i.test(line)) {
+  const noise = /subtotal|cambio|entreg|recib|efectivo|tarjeta|devuel/i;
+  const toNumber = c => {
+    let v = c;
+    if (v.includes(',') && v.includes('.')) v = v.replace(/\./g, '').replace(',', '.');
+    else if (v.includes(',')) v = v.replace(',', '.');
+    return parseFloat(v);
+  };
+
+  // 1st pass: strict "total" lines, excluding payment/change lines — take the FIRST match
+  for (const line of lines) {
+    if (/total/i.test(line) && !noise.test(line)) {
       const m = line.match(numRegex);
-      if (m) candidates.push(...m);
+      if (m) {
+        const n = toNumber(m[m.length - 1]); // last number on the line (amount usually comes after the label)
+        if (!isNaN(n)) return n;
+      }
     }
-  });
-  if (!candidates.length) {
-    const all = text.match(numRegex);
-    if (all) candidates = all;
   }
-  if (!candidates.length) return null;
-  const parsed = candidates
-    .map(c => {
-      let v = c;
-      if (v.includes(',') && v.includes('.')) v = v.replace(/\./g, '').replace(',', '.');
-      else if (v.includes(',')) v = v.replace(',', '.');
-      return parseFloat(v);
-    })
-    .filter(n => !isNaN(n));
+
+  // 2nd pass: any "total" line at all (looser), still take first match
+  for (const line of lines) {
+    if (/total/i.test(line)) {
+      const m = line.match(numRegex);
+      if (m) {
+        const n = toNumber(m[m.length - 1]);
+        if (!isNaN(n)) return n;
+      }
+    }
+  }
+
+  // fallback: largest number anywhere on the ticket
+  const all = text.match(numRegex);
+  if (!all) return null;
+  const parsed = all.map(toNumber).filter(n => !isNaN(n));
   if (!parsed.length) return null;
   return Math.max(...parsed);
 }
