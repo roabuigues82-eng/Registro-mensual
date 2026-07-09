@@ -461,7 +461,6 @@ function App(){
   const [exporting, setExporting] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState(null);
-  const [expandedDays, setExpandedDays] = useState(() => new Set());
   const fileInputRef = useRef(null);
 
   const key = monthKey(cursor);
@@ -537,14 +536,6 @@ function App(){
     }
   }
 
-  function toggleDay(day){
-    setExpandedDays(prev => {
-      const next = new Set(prev);
-      if (next.has(day)) next.delete(day); else next.add(day);
-      return next;
-    });
-  }
-
   function changeMonth(delta){
     const next = new Date(cursor.getFullYear(), cursor.getMonth() + delta, 1);
     setCursor(next);
@@ -576,26 +567,29 @@ function App(){
     setExporting(true);
     try {
       const [y, m] = key.split("-");
-      const rows = sortedDays
+      const rows = [];
+      sortedDays
         .slice()
         .sort((a,b) => Number(a) - Number(b))
-        .map(day => {
+        .forEach(day => {
           const tickets = normalizeDayTickets(entries[day]);
-          const e = sumTickets(tickets);
           const dateObj = new Date(Number(y), Number(m)-1, Number(day));
-          const tot = Number(e.efectivo||0) + Number(e.tarjeta||0);
-          return {
-            "Fecha": `${day}/${m}/${y}`,
-            "Día": DIAS[dateObj.getDay()],
-            "Efectivo (€)": Number(e.efectivo || 0),
-            "Tarjeta (€)": Number(e.tarjeta || 0),
-            "Total (€)": Number(tot.toFixed(2)),
-            "Base IVA 10% (€)": e.base10 === null || e.base10 === undefined ? "" : Number(e.base10),
-            "Base IVA 21% (€)": e.base21 === null || e.base21 === undefined ? "" : Number(e.base21),
-          };
+          tickets.forEach((t, i) => {
+            const tot = Number(t.efectivo||0) + Number(t.tarjeta||0);
+            rows.push({
+              "Fecha": `${day}/${m}/${y}`,
+              "Día": DIAS[dateObj.getDay()],
+              "Ticket #": i + 1,
+              "Efectivo (€)": Number(t.efectivo || 0),
+              "Tarjeta (€)": Number(t.tarjeta || 0),
+              "Total (€)": Number(tot.toFixed(2)),
+              "Base IVA 10% (€)": t.base10 === null || t.base10 === undefined ? "" : Number(t.base10),
+              "Base IVA 21% (€)": t.base21 === null || t.base21 === undefined ? "" : Number(t.base21),
+            });
+          });
         });
       rows.push({
-        "Fecha": "", "Día": "TOTAL",
+        "Fecha": "", "Día": "", "Ticket #": "TOTAL",
         "Efectivo (€)": Number(totals.efectivo.toFixed(2)),
         "Tarjeta (€)": Number(totals.tarjeta.toFixed(2)),
         "Total (€)": Number(totals.total.toFixed(2)),
@@ -604,7 +598,7 @@ function App(){
       });
 
       const ws = XLSX.utils.json_to_sheet(rows);
-      ws['!cols'] = [{wch:12},{wch:7},{wch:13},{wch:13},{wch:12},{wch:16},{wch:16}];
+      ws['!cols'] = [{wch:12},{wch:7},{wch:9},{wch:13},{wch:13},{wch:12},{wch:16},{wch:16}];
       const wb = XLSX.utils.book_new();
       const sheetName = `${MESES[Number(m)-1].slice(0,3)} ${y}`;
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
@@ -740,7 +734,7 @@ function App(){
         </button>
       </form>
 
-      <p className="section-label">Este mes</p>
+      <p className="section-label">Este mes · ticket a ticket</p>
 
       {loading ? (
         <div className="empty-state">Cargando…</div>
@@ -751,42 +745,30 @@ function App(){
           const [y, m] = key.split("-");
           const dateObj = new Date(Number(y), Number(m)-1, Number(day));
           const tickets = normalizeDayTickets(entries[day]);
-          const s = sumTickets(tickets);
-          const tot = s.efectivo + s.tarjeta;
-          const isOpen = expandedDays.has(day);
-          return (
-            <div className="ticket" key={day}>
-              <div className="ticket-top" onClick={() => toggleDay(day)} style={{cursor: tickets.length > 1 ? "pointer" : "default"}}>
-                <div>
-                  <div className="ticket-date">{day}/{m}/{y}</div>
-                  <div className="ticket-weekday">
-                    {DIAS[dateObj.getDay()]}{tickets.length > 1 ? ` · ${tickets.length} tickets` : ""}
+          return tickets.map((t, i) => {
+            const tot = Number(t.efectivo||0) + Number(t.tarjeta||0);
+            return (
+              <div className="ticket" key={`${day}-${i}`}>
+                <div className="ticket-top">
+                  <div>
+                    <div className="ticket-date">{day}/{m}/{y}</div>
+                    <div className="ticket-weekday">
+                      {DIAS[dateObj.getDay()]}{tickets.length > 1 ? ` · ticket ${i+1}/${tickets.length}` : ""}
+                    </div>
+                  </div>
+                  <div style={{display:"flex", alignItems:"center"}}>
+                    <div className="ticket-amount">{fmtEUR(tot)}</div>
+                    <button className="ticket-del" onClick={() => deleteTicket(day, i)} aria-label="Borrar">✕</button>
                   </div>
                 </div>
-                <div style={{display:"flex", alignItems:"center"}}>
-                  <div className="ticket-amount">{fmtEUR(tot)}</div>
-                  {tickets.length === 1 && (
-                    <button className="ticket-del" onClick={(ev) => { ev.stopPropagation(); deleteTicket(day, 0); }} aria-label="Borrar">✕</button>
-                  )}
+                <div className="ticket-sub">
+                  <span>Efvo {fmtEUR(t.efectivo||0)}</span>
+                  <span>Tarj {fmtEUR(t.tarjeta||0)}</span>
+                  {(t.base10 || t.base21) ? <span>IVA 10/21 registrado</span> : null}
                 </div>
               </div>
-              <div className="ticket-sub">
-                <span>Efvo {fmtEUR(s.efectivo)}</span>
-                <span>Tarj {fmtEUR(s.tarjeta)}</span>
-                {(s.base10 || s.base21) ? <span>IVA 10/21 registrado</span> : null}
-              </div>
-              {tickets.length > 1 && isOpen && (
-                <div className="ticket-list">
-                  {tickets.map((t, i) => (
-                    <div className="ticket-line" key={i}>
-                      <span>#{i+1} · Efvo {fmtEUR(t.efectivo||0)} · Tarj {fmtEUR(t.tarjeta||0)}</span>
-                      <button className="ticket-del" onClick={() => deleteTicket(day, i)} aria-label="Borrar ticket">✕</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
+            );
+          });
         })
       )}
 
