@@ -290,6 +290,21 @@
     color: #6b6555;
   }
 
+  .ticket-list {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed #c9c2ac;
+  }
+  .ticket-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 4px 0;
+    color: #4a453a;
+  }
+
   .empty-state {
     text-align: center;
     color: var(--text-lo);
@@ -371,6 +386,21 @@ function normalizeEntry(e){
   if (typeof e === 'number') return { efectivo: e, tarjeta: 0, base10: null, base21: null };
   return e || { efectivo: 0, tarjeta: 0, base10: null, base21: null };
 }
+function normalizeDayTickets(raw){
+  // Un día puede tener: nada, un número antiguo, un objeto único (v2), o una lista de tickets (v3)
+  if (raw === undefined || raw === null) return [];
+  if (Array.isArray(raw)) return raw.map(normalizeEntry);
+  return [normalizeEntry(raw)];
+}
+function sumTickets(tickets){
+  return tickets.reduce((acc, t) => {
+    acc.efectivo += Number(t.efectivo || 0);
+    acc.tarjeta += Number(t.tarjeta || 0);
+    acc.base10 += Number(t.base10 || 0);
+    acc.base21 += Number(t.base21 || 0);
+    return acc;
+  }, { efectivo: 0, tarjeta: 0, base10: 0, base21: 0 });
+}
 
 // --- OCR parsing helpers -------------------------------------------------
 const NUM_RE = /\d{1,3}(?:[.,]\d{3})*[.,]\d{2}/g;
@@ -431,6 +461,7 @@ function App(){
   const [exporting, setExporting] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState(null);
+  const [expandedDays, setExpandedDays] = useState(() => new Set());
   const fileInputRef = useRef(null);
 
   const key = monthKey(cursor);
@@ -471,22 +502,21 @@ function App(){
     const mkey = `${y}-${m}`;
     setSaving(true);
     try {
-      const raw = mkey === key ? null : localStorage.getItem(`ventas:${mkey}`);
-      const current = mkey === key ? (entries || {}) : JSON.parse(raw || "{}");
-      const updated = {
-        ...current,
-        [d]: {
-          efectivo: num(efectivoVal),
-          tarjeta: num(tarjetaVal),
-          base10: base10Val === "" ? null : num(base10Val),
-          base21: base21Val === "" ? null : num(base21Val),
-        }
-      };
+      const raw = mkey === key ? (entries ? entries[d] : undefined) : JSON.parse(localStorage.getItem(`ventas:${mkey}`) || "{}")[d];
+      const currentMonthData = mkey === key ? (entries || {}) : JSON.parse(localStorage.getItem(`ventas:${mkey}`) || "{}");
+      const dayTickets = normalizeDayTickets(raw);
+      dayTickets.push({
+        efectivo: num(efectivoVal),
+        tarjeta: num(tarjetaVal),
+        base10: base10Val === "" ? null : num(base10Val),
+        base21: base21Val === "" ? null : num(base21Val),
+      });
+      const updated = { ...currentMonthData, [d]: dayTickets };
       localStorage.setItem(`ventas:${mkey}`, JSON.stringify(updated));
       if (mkey === key) setEntries(updated);
       if (mkey !== key) setCursor(new Date(Number(y), Number(m) - 1, 1));
       resetForm();
-      showToast("Guardado");
+      showToast(dayTickets.length > 1 ? `Ticket añadido (${dayTickets.length} ese día)` : "Guardado");
     } catch (err) {
       showToast("Error al guardar");
     } finally {
@@ -494,15 +524,25 @@ function App(){
     }
   }
 
-  function deleteEntry(day){
+  function deleteTicket(day, idx){
+    const dayTickets = normalizeDayTickets(entries[day]).filter((_, i) => i !== idx);
     const updated = { ...entries };
-    delete updated[day];
+    if (dayTickets.length) updated[day] = dayTickets;
+    else delete updated[day];
     try {
       localStorage.setItem(`ventas:${key}`, JSON.stringify(updated));
       setEntries(updated);
     } catch (err) {
       showToast("Error al borrar");
     }
+  }
+
+  function toggleDay(day){
+    setExpandedDays(prev => {
+      const next = new Set(prev);
+      if (next.has(day)) next.delete(day); else next.add(day);
+      return next;
+    });
   }
 
   function changeMonth(delta){
@@ -518,11 +558,11 @@ function App(){
   const totals = useMemo(() => {
     if (!entries) return { total: 0, efectivo: 0, tarjeta: 0, base10: 0, base21: 0 };
     return Object.values(entries).reduce((acc, raw) => {
-      const e = normalizeEntry(raw);
-      acc.efectivo += Number(e.efectivo || 0);
-      acc.tarjeta += Number(e.tarjeta || 0);
-      acc.base10 += Number(e.base10 || 0);
-      acc.base21 += Number(e.base21 || 0);
+      const s = sumTickets(normalizeDayTickets(raw));
+      acc.efectivo += s.efectivo;
+      acc.tarjeta += s.tarjeta;
+      acc.base10 += s.base10;
+      acc.base21 += s.base21;
       return acc;
     }, { efectivo: 0, tarjeta: 0, base10: 0, base21: 0 });
   }, [entries]);
@@ -540,7 +580,8 @@ function App(){
         .slice()
         .sort((a,b) => Number(a) - Number(b))
         .map(day => {
-          const e = normalizeEntry(entries[day]);
+          const tickets = normalizeDayTickets(entries[day]);
+          const e = sumTickets(tickets);
           const dateObj = new Date(Number(y), Number(m)-1, Number(day));
           const tot = Number(e.efectivo||0) + Number(e.tarjeta||0);
           return {
@@ -644,6 +685,19 @@ function App(){
                    onChange={e => setDateVal(e.target.value)} required />
           </div>
         </div>
+        {(() => {
+          const [dy, dm, dd] = dateVal.split("-");
+          if (`${dy}-${dm}` !== key || !entries) return null;
+          const tickets = normalizeDayTickets(entries[dd]);
+          if (!tickets.length) return null;
+          const s = sumTickets(tickets);
+          return (
+            <p className="scan-note" style={{color:"var(--text-lo)"}}>
+              Ya llevas {tickets.length} ticket{tickets.length>1?'s':''} ese día · acumulado {fmtEUR(s.efectivo+s.tarjeta)}
+            </p>
+          );
+        })()}
+
         <div className="form-row">
           <div className="field">
             <label htmlFor="f-efectivo">Efectivo (€)</label>
@@ -658,7 +712,7 @@ function App(){
         </div>
 
         <div className="form-total">
-          <span>Total del día</span>
+          <span>Total de este ticket</span>
           <span>{fmtEUR(formTotal)}</span>
         </div>
 
@@ -682,7 +736,7 @@ function App(){
         )}
 
         <button className="btn-save" type="submit" disabled={saving}>
-          {saving ? "..." : "Guardar"}
+          {saving ? "..." : "+ Añadir ticket"}
         </button>
       </form>
 
@@ -696,25 +750,41 @@ function App(){
         sortedDays.map(day => {
           const [y, m] = key.split("-");
           const dateObj = new Date(Number(y), Number(m)-1, Number(day));
-          const e = normalizeEntry(entries[day]);
-          const tot = Number(e.efectivo||0) + Number(e.tarjeta||0);
+          const tickets = normalizeDayTickets(entries[day]);
+          const s = sumTickets(tickets);
+          const tot = s.efectivo + s.tarjeta;
+          const isOpen = expandedDays.has(day);
           return (
             <div className="ticket" key={day}>
-              <div className="ticket-top">
+              <div className="ticket-top" onClick={() => toggleDay(day)} style={{cursor: tickets.length > 1 ? "pointer" : "default"}}>
                 <div>
                   <div className="ticket-date">{day}/{m}/{y}</div>
-                  <div className="ticket-weekday">{DIAS[dateObj.getDay()]}</div>
+                  <div className="ticket-weekday">
+                    {DIAS[dateObj.getDay()]}{tickets.length > 1 ? ` · ${tickets.length} tickets` : ""}
+                  </div>
                 </div>
                 <div style={{display:"flex", alignItems:"center"}}>
                   <div className="ticket-amount">{fmtEUR(tot)}</div>
-                  <button className="ticket-del" onClick={() => deleteEntry(day)} aria-label="Borrar">✕</button>
+                  {tickets.length === 1 && (
+                    <button className="ticket-del" onClick={(ev) => { ev.stopPropagation(); deleteTicket(day, 0); }} aria-label="Borrar">✕</button>
+                  )}
                 </div>
               </div>
               <div className="ticket-sub">
-                <span>Efvo {fmtEUR(e.efectivo || 0)}</span>
-                <span>Tarj {fmtEUR(e.tarjeta || 0)}</span>
-                {(e.base10 || e.base21) ? <span>IVA 10/21 registrado</span> : null}
+                <span>Efvo {fmtEUR(s.efectivo)}</span>
+                <span>Tarj {fmtEUR(s.tarjeta)}</span>
+                {(s.base10 || s.base21) ? <span>IVA 10/21 registrado</span> : null}
               </div>
+              {tickets.length > 1 && isOpen && (
+                <div className="ticket-list">
+                  {tickets.map((t, i) => (
+                    <div className="ticket-line" key={i}>
+                      <span>#{i+1} · Efvo {fmtEUR(t.efectivo||0)} · Tarj {fmtEUR(t.tarjeta||0)}</span>
+                      <button className="ticket-del" onClick={() => deleteTicket(day, i)} aria-label="Borrar ticket">✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })
