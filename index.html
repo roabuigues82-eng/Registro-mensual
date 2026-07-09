@@ -422,29 +422,40 @@ function extractFields(text){
   const result = { efectivo: null, tarjeta: null, otro: null, base10: null, base21: null, total: null };
   const noise = /subtotal|cambio|entreg|devuel/i;
 
-  for (const line of lines) {
+  // Busca un número en la propia línea, o si no hay, en las 2 líneas siguientes
+  // (algunos tickets ponen la etiqueta y el importe en líneas separadas)
+  function findNearbyNumber(startIdx){
+    for (let i = startIdx; i <= startIdx + 2 && i < lines.length; i++) {
+      const n = firstNumberOnLine(lines[i]);
+      if (n !== null) return n;
+    }
+    return null;
+  }
+
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx];
     if (result.efectivo === null && /efectivo/i.test(line) && !noise.test(line)) {
-      const n = firstNumberOnLine(line);
+      const n = findNearbyNumber(idx);
       if (n !== null) result.efectivo = n;
     }
-    if (result.tarjeta === null && /(tarjeta|visa|d[eé]bito|cr[eé]dito)/i.test(line)) {
-      const n = firstNumberOnLine(line);
+    if (result.tarjeta === null && /(tarjeta|visa|master|d[eé]bito|cr[eé]dito|tpv)/i.test(line)) {
+      const n = findNearbyNumber(idx);
       if (n !== null) result.tarjeta = n;
     }
     if (result.otro === null && /(bizum|vale|cheque|transferencia)/i.test(line)) {
-      const n = firstNumberOnLine(line);
+      const n = findNearbyNumber(idx);
       if (n !== null) result.otro = n;
     }
     if (result.base10 === null && /10\s?%/.test(line) && /base|iva/i.test(line)) {
-      const n = firstNumberOnLine(line);
+      const n = findNearbyNumber(idx);
       if (n !== null) result.base10 = n;
     }
     if (result.base21 === null && /21\s?%/.test(line) && /base|iva/i.test(line)) {
-      const n = firstNumberOnLine(line);
+      const n = findNearbyNumber(idx);
       if (n !== null) result.base21 = n;
     }
     if (result.total === null && /total/i.test(line) && !noise.test(line)) {
-      const n = firstNumberOnLine(line);
+      const n = findNearbyNumber(idx);
       if (n !== null) result.total = n;
     }
   }
