@@ -417,6 +417,13 @@ function firstNumberOnLine(line){
   const n = toNumber(m[m.length - 1]);
   return isNaN(n) ? null : n;
 }
+function leadingNumberOnLine(line){
+  // Toma el PRIMER número de la línea (útil para "10%  14,91  1,49" -> queremos 14,91, no la cuota 1,49)
+  const m = line.match(NUM_RE);
+  if (!m) return null;
+  const n = toNumber(m[0]);
+  return isNaN(n) ? null : n;
+}
 function extractFields(text){
   const lines = text.split('\n');
   const result = { efectivo: null, tarjeta: null, otro: null, base10: null, base21: null, total: null };
@@ -446,12 +453,12 @@ function extractFields(text){
       const n = findNearbyNumber(idx);
       if (n !== null) result.otro = n;
     }
-    if (result.base10 === null && /10\s?%/.test(line) && /base|iva/i.test(line)) {
-      const n = findNearbyNumber(idx);
+    if (result.base10 === null && /10\s?%/.test(line)) {
+      const n = leadingNumberOnLine(line);
       if (n !== null) result.base10 = n;
     }
-    if (result.base21 === null && /21\s?%/.test(line) && /base|iva/i.test(line)) {
-      const n = findNearbyNumber(idx);
+    if (result.base21 === null && /21\s?%/.test(line)) {
+      const n = leadingNumberOnLine(line);
       if (n !== null) result.base21 = n;
     }
     if (result.total === null && /total/i.test(line) && !noise.test(line)) {
