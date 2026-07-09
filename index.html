@@ -383,8 +383,8 @@ function num(v){
 }
 function normalizeEntry(e){
   // Compatibilidad con el formato anterior, donde cada día guardaba solo un número (el total)
-  if (typeof e === 'number') return { efectivo: e, tarjeta: 0, base10: null, base21: null };
-  return e || { efectivo: 0, tarjeta: 0, base10: null, base21: null };
+  if (typeof e === 'number') return { efectivo: e, tarjeta: 0, otro: 0, base10: null, base21: null };
+  return { otro: 0, ...(e || {}), efectivo: (e && e.efectivo) || 0, tarjeta: (e && e.tarjeta) || 0 };
 }
 function normalizeDayTickets(raw){
   // Un día puede tener: nada, un número antiguo, un objeto único (v2), o una lista de tickets (v3)
@@ -396,10 +396,11 @@ function sumTickets(tickets){
   return tickets.reduce((acc, t) => {
     acc.efectivo += Number(t.efectivo || 0);
     acc.tarjeta += Number(t.tarjeta || 0);
+    acc.otro += Number(t.otro || 0);
     acc.base10 += Number(t.base10 || 0);
     acc.base21 += Number(t.base21 || 0);
     return acc;
-  }, { efectivo: 0, tarjeta: 0, base10: 0, base21: 0 });
+  }, { efectivo: 0, tarjeta: 0, otro: 0, base10: 0, base21: 0 });
 }
 
 // --- OCR parsing helpers -------------------------------------------------
@@ -418,7 +419,7 @@ function firstNumberOnLine(line){
 }
 function extractFields(text){
   const lines = text.split('\n');
-  const result = { efectivo: null, tarjeta: null, base10: null, base21: null, total: null };
+  const result = { efectivo: null, tarjeta: null, otro: null, base10: null, base21: null, total: null };
   const noise = /subtotal|cambio|entreg|devuel/i;
 
   for (const line of lines) {
@@ -429,6 +430,10 @@ function extractFields(text){
     if (result.tarjeta === null && /(tarjeta|visa|d[eé]bito|cr[eé]dito)/i.test(line)) {
       const n = firstNumberOnLine(line);
       if (n !== null) result.tarjeta = n;
+    }
+    if (result.otro === null && /(bizum|vale|cheque|transferencia)/i.test(line)) {
+      const n = firstNumberOnLine(line);
+      if (n !== null) result.otro = n;
     }
     if (result.base10 === null && /10\s?%/.test(line) && /base|iva/i.test(line)) {
       const n = firstNumberOnLine(line);
@@ -453,6 +458,7 @@ function App(){
   const [dateVal, setDateVal] = useState(todayISO());
   const [efectivoVal, setEfectivoVal] = useState("");
   const [tarjetaVal, setTarjetaVal] = useState("");
+  const [otroVal, setOtroVal] = useState("");
   const [base10Val, setBase10Val] = useState("");
   const [base21Val, setBase21Val] = useState("");
   const [showIva, setShowIva] = useState(false);
@@ -484,11 +490,12 @@ function App(){
     setTimeout(() => setToast(null), 1800);
   }
 
-  const formTotal = num(efectivoVal) + num(tarjetaVal);
+  const formTotal = num(efectivoVal) + num(tarjetaVal) + num(otroVal);
 
   function resetForm(){
     setEfectivoVal("");
     setTarjetaVal("");
+    setOtroVal("");
     setBase10Val("");
     setBase21Val("");
     setScanNote(null);
@@ -496,7 +503,7 @@ function App(){
 
   function saveEntry(e){
     e.preventDefault();
-    if (!dateVal || (efectivoVal === "" && tarjetaVal === "")) return;
+    if (!dateVal || (efectivoVal === "" && tarjetaVal === "" && otroVal === "")) return;
     const [y, m, d] = dateVal.split("-");
     const mkey = `${y}-${m}`;
     setSaving(true);
@@ -507,6 +514,7 @@ function App(){
       dayTickets.push({
         efectivo: num(efectivoVal),
         tarjeta: num(tarjetaVal),
+        otro: num(otroVal),
         base10: base10Val === "" ? null : num(base10Val),
         base21: base21Val === "" ? null : num(base21Val),
       });
@@ -557,7 +565,7 @@ function App(){
       return acc;
     }, { efectivo: 0, tarjeta: 0, base10: 0, base21: 0 });
   }, [entries]);
-  totals.total = totals.efectivo + totals.tarjeta;
+  totals.total = totals.efectivo + totals.tarjeta + totals.otro;
 
   const numDays = sortedDays.length;
   const avg = numDays ? totals.total / numDays : 0;
@@ -575,13 +583,14 @@ function App(){
           const tickets = normalizeDayTickets(entries[day]);
           const dateObj = new Date(Number(y), Number(m)-1, Number(day));
           tickets.forEach((t, i) => {
-            const tot = Number(t.efectivo||0) + Number(t.tarjeta||0);
+            const tot = Number(t.efectivo||0) + Number(t.tarjeta||0) + Number(t.otro||0);
             rows.push({
               "Fecha": `${day}/${m}/${y}`,
               "Día": DIAS[dateObj.getDay()],
               "Ticket #": i + 1,
               "Efectivo (€)": Number(t.efectivo || 0),
               "Tarjeta (€)": Number(t.tarjeta || 0),
+              "Otros (€)": Number(t.otro || 0),
               "Total (€)": Number(tot.toFixed(2)),
               "Base IVA 10% (€)": t.base10 === null || t.base10 === undefined ? "" : Number(t.base10),
               "Base IVA 21% (€)": t.base21 === null || t.base21 === undefined ? "" : Number(t.base21),
@@ -592,13 +601,14 @@ function App(){
         "Fecha": "", "Día": "", "Ticket #": "TOTAL",
         "Efectivo (€)": Number(totals.efectivo.toFixed(2)),
         "Tarjeta (€)": Number(totals.tarjeta.toFixed(2)),
+        "Otros (€)": Number(totals.otro.toFixed(2)),
         "Total (€)": Number(totals.total.toFixed(2)),
         "Base IVA 10% (€)": Number(totals.base10.toFixed(2)),
         "Base IVA 21% (€)": Number(totals.base21.toFixed(2)),
       });
 
       const ws = XLSX.utils.json_to_sheet(rows);
-      ws['!cols'] = [{wch:12},{wch:7},{wch:9},{wch:13},{wch:13},{wch:12},{wch:16},{wch:16}];
+      ws['!cols'] = [{wch:12},{wch:7},{wch:9},{wch:13},{wch:13},{wch:11},{wch:12},{wch:16},{wch:16}];
       const wb = XLSX.utils.book_new();
       const sheetName = `${MESES[Number(m)-1].slice(0,3)} ${y}`;
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
@@ -623,6 +633,7 @@ function App(){
         let filled = [];
         if (f.efectivo !== null) { setEfectivoVal(f.efectivo.toFixed(2)); filled.push('efectivo'); }
         if (f.tarjeta !== null) { setTarjetaVal(f.tarjeta.toFixed(2)); filled.push('tarjeta'); }
+        if (f.otro !== null) { setOtroVal(f.otro.toFixed(2)); filled.push('otros'); }
         if (f.base10 !== null) { setBase10Val(f.base10.toFixed(2)); setShowIva(true); }
         if (f.base21 !== null) { setBase21Val(f.base21.toFixed(2)); setShowIva(true); }
         if (!filled.length && f.total !== null) {
@@ -657,6 +668,7 @@ function App(){
         <div className="summary-row">
           <span>Efectivo: <b>{loading ? "-" : fmtEUR(totals.efectivo)}</b></span>
           <span>Tarjeta: <b>{loading ? "-" : fmtEUR(totals.tarjeta)}</b></span>
+          {totals.otro > 0 && <span>Otros: <b>{fmtEUR(totals.otro)}</b></span>}
         </div>
         <div className="summary-row" style={{marginTop:6}}>
           <span>Días: <b>{loading ? "-" : numDays}</b></span>
@@ -687,7 +699,7 @@ function App(){
           const s = sumTickets(tickets);
           return (
             <p className="scan-note" style={{color:"var(--text-lo)"}}>
-              Ya llevas {tickets.length} ticket{tickets.length>1?'s':''} ese día · acumulado {fmtEUR(s.efectivo+s.tarjeta)}
+              Ya llevas {tickets.length} ticket{tickets.length>1?'s':''} ese día · acumulado {fmtEUR(s.efectivo+s.tarjeta+s.otro)}
             </p>
           );
         })()}
@@ -702,6 +714,11 @@ function App(){
             <label htmlFor="f-tarjeta">Tarjeta (€)</label>
             <input id="f-tarjeta" type="text" inputMode="decimal" placeholder="0,00"
                    value={tarjetaVal} onChange={e => setTarjetaVal(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="f-otro">Otros (Bizum, vales…)</label>
+            <input id="f-otro" type="text" inputMode="decimal" placeholder="0,00"
+                   value={otroVal} onChange={e => setOtroVal(e.target.value)} />
           </div>
         </div>
 
@@ -746,7 +763,7 @@ function App(){
           const dateObj = new Date(Number(y), Number(m)-1, Number(day));
           const tickets = normalizeDayTickets(entries[day]);
           return tickets.map((t, i) => {
-            const tot = Number(t.efectivo||0) + Number(t.tarjeta||0);
+            const tot = Number(t.efectivo||0) + Number(t.tarjeta||0) + Number(t.otro||0);
             return (
               <div className="ticket" key={`${day}-${i}`}>
                 <div className="ticket-top">
@@ -764,6 +781,7 @@ function App(){
                 <div className="ticket-sub">
                   <span>Efvo {fmtEUR(t.efectivo||0)}</span>
                   <span>Tarj {fmtEUR(t.tarjeta||0)}</span>
+                  {t.otro > 0 && <span>Otros {fmtEUR(t.otro)}</span>}
                   {(t.base10 || t.base21) ? <span>IVA 10/21 registrado</span> : null}
                 </div>
               </div>
