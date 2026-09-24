@@ -107,7 +107,8 @@
 
   .summary-row {
     display: flex;
-    gap: 22px;
+    flex-wrap: wrap;
+    gap: 6px 22px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
     color: var(--text-lo);
@@ -140,13 +141,17 @@
     border: 1px solid var(--rule);
     border-radius: 16px;
     padding: 16px;
-    margin-bottom: 24px;
-    display: flex;
-    gap: 10px;
-    align-items: flex-end;
+    margin-bottom: 14px;
   }
 
-  .field { flex: 1; }
+  .form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .field { flex: 1 1 130px; min-width: 0; }
   .field label {
     display: block;
     font-size: 11px;
@@ -157,6 +162,7 @@
   }
   .field input {
     width: 100%;
+    min-width: 0;
     background: var(--ink);
     border: 1px solid var(--rule);
     color: var(--text-hi);
@@ -167,16 +173,47 @@
   }
   .field input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+  .form-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 8px 2px 12px;
+    border-bottom: 1px dashed var(--rule);
+    margin-bottom: 12px;
+  }
+  .form-total span:first-child {
+    font-size: 11px;
+    color: var(--text-lo);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .form-total span:last-child {
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  .iva-toggle {
+    background: none;
+    border: none;
+    color: var(--text-lo);
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    cursor: pointer;
+    padding: 0 0 10px;
+    text-decoration: underline;
+  }
+
   .btn-save {
+    width: 100%;
     background: var(--accent);
     color: #08130e;
     border: none;
     font-weight: 800;
-    padding: 11px 16px;
+    padding: 12px 16px;
     border-radius: 10px;
     font-size: 14px;
     cursor: pointer;
-    white-space: nowrap;
   }
   .btn-save:disabled { opacity: 0.5; cursor: default; }
   .btn-save:active { transform: scale(0.97); }
@@ -197,9 +234,6 @@
     border-radius: 4px;
     padding: 12px 14px;
     margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     box-shadow: 0 6px 14px -8px rgba(0,0,0,0.5);
   }
   .ticket::before, .ticket::after {
@@ -213,6 +247,12 @@
   }
   .ticket::before { top: -3px; }
   .ticket::after { bottom: -3px; transform: rotate(180deg); }
+
+  .ticket-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
 
   .ticket-date {
     font-family: 'JetBrains Mono', monospace;
@@ -240,6 +280,29 @@
     cursor: pointer;
     padding: 4px 0 4px 12px;
     line-height: 1;
+  }
+  .ticket-sub {
+    display: flex;
+    gap: 14px;
+    margin-top: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #6b6555;
+  }
+
+  .ticket-list {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed #c9c2ac;
+  }
+  .ticket-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 4px 0;
+    color: #4a453a;
   }
 
   .empty-state {
@@ -286,6 +349,8 @@
     font-size: 13px;
     font-weight: 700;
     z-index: 50;
+    max-width: min(90vw, 380px);
+    text-align: center;
   }
 </style>
 </head>
@@ -299,7 +364,7 @@
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
 
 <script type="text/babel" data-presets="react">
-const { useState, useEffect, useMemo, useCallback } = React;
+const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DIAS = ["dom","lun","mar","mié","jue","vie","sáb"];
@@ -313,50 +378,120 @@ function todayISO(){
 function fmtEUR(n){
   return new Intl.NumberFormat('es-ES', {style:'currency', currency:'EUR'}).format(n || 0);
 }
+function num(v){
+  if (v === "" || v === null || v === undefined) return 0;
+  const n = parseFloat(String(v).replace(',', '.'));
+  return isNaN(n) ? 0 : n;
+}
+function normalizeEntry(e){
+  // Compatibilidad con el formato anterior, donde cada día guardaba solo un número (el total)
+  if (typeof e === 'number') return { efectivo: e, tarjeta: 0, otro: 0, base10: null, base21: null };
+  return { otro: 0, ...(e || {}), efectivo: (e && e.efectivo) || 0, tarjeta: (e && e.tarjeta) || 0 };
+}
+function normalizeDayTickets(raw){
+  // Un día puede tener: nada, un número antiguo, un objeto único (v2), o una lista de tickets (v3)
+  if (raw === undefined || raw === null) return [];
+  if (Array.isArray(raw)) return raw.map(normalizeEntry);
+  return [normalizeEntry(raw)];
+}
+function sumTickets(tickets){
+  return tickets.reduce((acc, t) => {
+    acc.efectivo += Number(t.efectivo || 0);
+    acc.tarjeta += Number(t.tarjeta || 0);
+    acc.otro += Number(t.otro || 0);
+    acc.base10 += Number(t.base10 || 0);
+    acc.base21 += Number(t.base21 || 0);
+    return acc;
+  }, { efectivo: 0, tarjeta: 0, otro: 0, base10: 0, base21: 0 });
+}
 
-function extractTotal(text){
-  const numRegex = /\d{1,3}(?:[.,]\d{3})*[.,]\d{2}/g;
+// --- OCR parsing helpers -------------------------------------------------
+const NUM_RE = /\d{1,3}(?:[.,]\d{3})*[.,]\d{2}/g;
+function toNumber(c){
+  let v = c;
+  if (v.includes(',') && v.includes('.')) v = v.replace(/\./g, '').replace(',', '.');
+  else if (v.includes(',')) v = v.replace(',', '.');
+  return parseFloat(v);
+}
+function firstNumberOnLine(line){
+  const m = line.match(NUM_RE);
+  if (!m) return null;
+  const n = toNumber(m[m.length - 1]);
+  return isNaN(n) ? null : n;
+}
+function leadingNumberOnLine(line){
+  // Toma el PRIMER número de la línea (útil para "10%  14,91  1,49" -> queremos 14,91, no la cuota 1,49)
+  const m = line.match(NUM_RE);
+  if (!m) return null;
+  const n = toNumber(m[0]);
+  return isNaN(n) ? null : n;
+}
+function extractFields(text){
   const lines = text.split('\n');
-  let candidates = [];
-  lines.forEach(line => {
-    if (/total/i.test(line) && !/subtotal/i.test(line)) {
-      const m = line.match(numRegex);
-      if (m) candidates.push(...m);
+  const result = { efectivo: null, tarjeta: null, otro: null, base10: null, base21: null, total: null };
+  const noise = /subtotal|cambio|entreg|devuel/i;
+
+  // Busca un número en la propia línea, o si no hay, en las 2 líneas siguientes
+  // (algunos tickets ponen la etiqueta y el importe en líneas separadas)
+  function findNearbyNumber(startIdx){
+    for (let i = startIdx; i <= startIdx + 2 && i < lines.length; i++) {
+      const n = firstNumberOnLine(lines[i]);
+      if (n !== null) return n;
     }
-  });
-  if (!candidates.length) {
-    const all = text.match(numRegex);
-    if (all) candidates = all;
+    return null;
   }
-  if (!candidates.length) return null;
-  const parsed = candidates
-    .map(c => {
-      let v = c;
-      if (v.includes(',') && v.includes('.')) v = v.replace(/\./g, '').replace(',', '.');
-      else if (v.includes(',')) v = v.replace(',', '.');
-      return parseFloat(v);
-    })
-    .filter(n => !isNaN(n));
-  if (!parsed.length) return null;
-  return Math.max(...parsed);
+
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx];
+    if (result.efectivo === null && /efectivo/i.test(line) && !noise.test(line)) {
+      const n = findNearbyNumber(idx);
+      if (n !== null) result.efectivo = n;
+    }
+    if (result.tarjeta === null && /(tarjeta|visa|master|d[eé]bito|cr[eé]dito|tpv)/i.test(line)) {
+      const n = findNearbyNumber(idx);
+      if (n !== null) result.tarjeta = n;
+    }
+    if (result.otro === null && /(bizum|vale|cheque|transferencia)/i.test(line)) {
+      const n = findNearbyNumber(idx);
+      if (n !== null) result.otro = n;
+    }
+    if (result.base10 === null && /10\s?%/.test(line)) {
+      const n = leadingNumberOnLine(line);
+      if (n !== null) result.base10 = n;
+    }
+    if (result.base21 === null && /21\s?%/.test(line)) {
+      const n = leadingNumberOnLine(line);
+      if (n !== null) result.base21 = n;
+    }
+    if (result.total === null && /total/i.test(line) && !noise.test(line)) {
+      const n = findNearbyNumber(idx);
+      if (n !== null) result.total = n;
+    }
+  }
+  return result;
 }
 
 function App(){
   const [cursor, setCursor] = useState(new Date());
-  const [entries, setEntries] = useState(null); // {"01": 123.45, ...}
+  const [entries, setEntries] = useState(null); // {"01": {efectivo,tarjeta,base10,base21}, ...}
   const [loading, setLoading] = useState(true);
   const [dateVal, setDateVal] = useState(todayISO());
-  const [amountVal, setAmountVal] = useState("");
+  const [efectivoVal, setEfectivoVal] = useState("");
+  const [tarjetaVal, setTarjetaVal] = useState("");
+  const [otroVal, setOtroVal] = useState("");
+  const [base10Val, setBase10Val] = useState("");
+  const [base21Val, setBase21Val] = useState("");
+  const [showIva, setShowIva] = useState(false);
   const [toast, setToast] = useState(null);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState(null);
-  const fileInputRef = React.useRef(null);
+  const fileInputRef = useRef(null);
 
   const key = monthKey(cursor);
 
-  const loadMonth = useCallback(async (mkey) => {
+  const loadMonth = useCallback((mkey) => {
     setLoading(true);
     try {
       const raw = localStorage.getItem(`ventas:${mkey}`);
@@ -372,28 +507,43 @@ function App(){
 
   function showToast(msg){
     setToast(msg);
-    setTimeout(() => setToast(null), 1800);
+    setTimeout(() => setToast(null), msg && msg.length > 40 ? 5000 : 1800);
   }
 
-  async function saveEntry(e){
+  const formTotal = num(efectivoVal) + num(tarjetaVal) + num(otroVal);
+
+  function resetForm(){
+    setEfectivoVal("");
+    setTarjetaVal("");
+    setOtroVal("");
+    setBase10Val("");
+    setBase21Val("");
+    setScanNote(null);
+  }
+
+  function saveEntry(e){
     e.preventDefault();
-    if (!dateVal || !amountVal) return;
+    if (!dateVal || (efectivoVal === "" && tarjetaVal === "" && otroVal === "")) return;
     const [y, m, d] = dateVal.split("-");
-    if (`${y}-${m}` !== key) {
-      // switch view to the month being edited
-      const newCursor = new Date(Number(y), Number(m)-1, 1);
-      setCursor(newCursor);
-    }
+    const mkey = `${y}-${m}`;
     setSaving(true);
     try {
-      const mkey = `${y}-${m}`;
-      const raw = localStorage.getItem(`ventas:${mkey}`);
-      const current = mkey === key ? entries : JSON.parse(raw || "{}");
-      const updated = { ...current, [d]: parseFloat(amountVal) };
+      const raw = mkey === key ? (entries ? entries[d] : undefined) : JSON.parse(localStorage.getItem(`ventas:${mkey}`) || "{}")[d];
+      const currentMonthData = mkey === key ? (entries || {}) : JSON.parse(localStorage.getItem(`ventas:${mkey}`) || "{}");
+      const dayTickets = normalizeDayTickets(raw);
+      dayTickets.push({
+        efectivo: num(efectivoVal),
+        tarjeta: num(tarjetaVal),
+        otro: num(otroVal),
+        base10: base10Val === "" ? null : num(base10Val),
+        base21: base21Val === "" ? null : num(base21Val),
+      });
+      const updated = { ...currentMonthData, [d]: dayTickets };
       localStorage.setItem(`ventas:${mkey}`, JSON.stringify(updated));
       if (mkey === key) setEntries(updated);
-      setAmountVal("");
-      showToast("Guardado");
+      if (mkey !== key) setCursor(new Date(Number(y), Number(m) - 1, 1));
+      resetForm();
+      showToast(dayTickets.length > 1 ? `Ticket añadido (${dayTickets.length} ese día)` : "Guardado");
     } catch (err) {
       showToast("Error al guardar");
     } finally {
@@ -401,9 +551,11 @@ function App(){
     }
   }
 
-  async function deleteEntry(day){
+  function deleteTicket(day, idx){
+    const dayTickets = normalizeDayTickets(entries[day]).filter((_, i) => i !== idx);
     const updated = { ...entries };
-    delete updated[day];
+    if (dayTickets.length) updated[day] = dayTickets;
+    else delete updated[day];
     try {
       localStorage.setItem(`ventas:${key}`, JSON.stringify(updated));
       setEntries(updated);
@@ -422,67 +574,140 @@ function App(){
     return Object.keys(entries).sort((a,b) => Number(b) - Number(a));
   }, [entries]);
 
-  const total = useMemo(() => {
-    if (!entries) return 0;
-    return Object.values(entries).reduce((s, v) => s + Number(v), 0);
+  const totals = useMemo(() => {
+    if (!entries) return { total: 0, efectivo: 0, tarjeta: 0, base10: 0, base21: 0 };
+    return Object.values(entries).reduce((acc, raw) => {
+      const s = sumTickets(normalizeDayTickets(raw));
+      acc.efectivo += s.efectivo;
+      acc.tarjeta += s.tarjeta;
+      acc.base10 += s.base10;
+      acc.base21 += s.base21;
+      return acc;
+    }, { efectivo: 0, tarjeta: 0, base10: 0, base21: 0 });
   }, [entries]);
+  totals.total = totals.efectivo + totals.tarjeta + totals.otro;
 
   const numDays = sortedDays.length;
-  const avg = numDays ? total / numDays : 0;
+  const avg = numDays ? totals.total / numDays : 0;
 
-  async function exportMonth(){
+  function buildExcelForMonth(mkey, monthEntries){
+    if (typeof XLSX === 'undefined') {
+      throw new Error('No se pudo cargar la librería de Excel (revisa tu conexión a internet y recarga la página).');
+    }
+    const [y, m] = mkey.split("-");
+    const days = Object.keys(monthEntries).sort((a,b) => Number(a) - Number(b));
+    if (!days.length) return false;
+    const rows = [];
+    let t_efectivo = 0, t_tarjeta = 0, t_otro = 0, t_base10 = 0, t_base21 = 0;
+    days.forEach(day => {
+      const tickets = normalizeDayTickets(monthEntries[day]);
+      const dateObj = new Date(Number(y), Number(m)-1, Number(day));
+      tickets.forEach((t, i) => {
+        const tot = Number(t.efectivo||0) + Number(t.tarjeta||0) + Number(t.otro||0);
+        t_efectivo += Number(t.efectivo||0);
+        t_tarjeta += Number(t.tarjeta||0);
+        t_otro += Number(t.otro||0);
+        t_base10 += Number(t.base10||0);
+        t_base21 += Number(t.base21||0);
+        rows.push({
+          "Fecha": `${day}/${m}/${y}`,
+          "Día": DIAS[dateObj.getDay()],
+          "Ticket #": i + 1,
+          "Efectivo (€)": Number(t.efectivo || 0),
+          "Tarjeta (€)": Number(t.tarjeta || 0),
+          "Otros (€)": Number(t.otro || 0),
+          "Total (€)": Number(tot.toFixed(2)),
+          "Base IVA 10% (€)": t.base10 === null || t.base10 === undefined ? "" : Number(t.base10),
+          "Base IVA 21% (€)": t.base21 === null || t.base21 === undefined ? "" : Number(t.base21),
+        });
+      });
+    });
+    rows.push({
+      "Fecha": "", "Día": "", "Ticket #": "TOTAL",
+      "Efectivo (€)": Number(t_efectivo.toFixed(2)),
+      "Tarjeta (€)": Number(t_tarjeta.toFixed(2)),
+      "Otros (€)": Number(t_otro.toFixed(2)),
+      "Total (€)": Number((t_efectivo + t_tarjeta + t_otro).toFixed(2)),
+      "Base IVA 10% (€)": Number(t_base10.toFixed(2)),
+      "Base IVA 21% (€)": Number(t_base21.toFixed(2)),
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{wch:12},{wch:7},{wch:9},{wch:13},{wch:13},{wch:11},{wch:12},{wch:16},{wch:16}];
+    const wb = XLSX.utils.book_new();
+    const sheetName = `${MESES[Number(m)-1].slice(0,3)} ${y}`;
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    XLSX.writeFile(wb, `resumen_ventas_${y}-${m}.xlsx`);
+    return true;
+  }
+
+  function exportMonth(){
     if (!numDays) return;
     setExporting(true);
     try {
-      const [y, m] = key.split("-");
-      const rows = sortedDays
-        .slice()
-        .sort((a,b) => Number(a) - Number(b))
-        .map(day => {
-          const iso = `${y}-${m}-${day}`;
-          const dateObj = new Date(Number(y), Number(m)-1, Number(day));
-          return {
-            "Fecha": `${day}/${m}/${y}`,
-            "Día": DIAS[dateObj.getDay()],
-            "Total ventas (€)": Number(entries[day])
-          };
-        });
-      rows.push({ "Fecha": "", "Día": "TOTAL", "Total ventas (€)": Number(total.toFixed(2)) });
-
-      const ws = XLSX.utils.json_to_sheet(rows);
-      ws['!cols'] = [{wch:12},{wch:8},{wch:16}];
-      const wb = XLSX.utils.book_new();
-      const sheetName = `${MESES[Number(m)-1].slice(0,3)} ${y}`;
-      XLSX.utils.book_append_sheet(wb, ws, sheetName);
-      XLSX.writeFile(wb, `resumen_ventas_${y}-${m}.xlsx`);
-      showToast("Excel generado");
+      const ok = buildExcelForMonth(key, entries || {});
+      if (ok) {
+        localStorage.setItem(`ventas:${key}:exported`, "1");
+        showToast("Excel generado");
+      }
     } catch (err) {
-      showToast("Error al exportar");
+      showToast("Error: " + (err && err.message ? err.message : "desconocido"));
     } finally {
       setExporting(false);
     }
   }
 
-  async function handleScan(e){
+  // Al abrir la app: si ya estamos en un mes nuevo y el mes anterior tiene
+  // datos sin exportar todavía, genera y descarga su Excel automáticamente.
+  useEffect(() => {
+    try {
+      const today = new Date();
+      const prevDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const prevKey = monthKey(prevDate);
+      const alreadyExported = localStorage.getItem(`ventas:${prevKey}:exported`) === "1";
+      if (alreadyExported) return;
+      const rawPrev = localStorage.getItem(`ventas:${prevKey}`);
+      if (!rawPrev) return;
+      const prevEntries = JSON.parse(rawPrev);
+      if (!Object.keys(prevEntries).length) return;
+      const ok = buildExcelForMonth(prevKey, prevEntries);
+      if (ok) {
+        localStorage.setItem(`ventas:${prevKey}:exported`, "1");
+        const [py, pm] = prevKey.split("-");
+        showToast(`Resumen de ${MESES[Number(pm)-1]} descargado automáticamente`);
+      }
+    } catch (err) {
+      // si algo falla aquí, no interrumpimos el uso normal de la app
+    }
+  }, []);
+
+  function handleScan(e){
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
     if (!file) return;
     setScanning(true);
     setScanNote(null);
-    try {
-      const { data } = await Tesseract.recognize(file, 'spa');
-      const found = extractTotal(data.text);
-      if (found) {
-        setAmountVal(found.toFixed(2));
-        setScanNote(`Detectado ${fmtEUR(found)} — revisa y confirma antes de guardar.`);
-      } else {
-        setScanNote("No he podido leer el total. Escríbelo a mano.");
-      }
-    } catch (err) {
-      setScanNote("Error al leer la foto. Inténtalo de nuevo.");
-    } finally {
-      setScanning(false);
-    }
+    Tesseract.recognize(file, 'spa')
+      .then(({ data }) => {
+        const f = extractFields(data.text);
+        let filled = [];
+        if (f.efectivo !== null) { setEfectivoVal(f.efectivo.toFixed(2)); filled.push('efectivo'); }
+        if (f.tarjeta !== null) { setTarjetaVal(f.tarjeta.toFixed(2)); filled.push('tarjeta'); }
+        if (f.otro !== null) { setOtroVal(f.otro.toFixed(2)); filled.push('otros'); }
+        if (f.base10 !== null) { setBase10Val(f.base10.toFixed(2)); setShowIva(true); }
+        if (f.base21 !== null) { setBase21Val(f.base21.toFixed(2)); setShowIva(true); }
+        if (!filled.length && f.total !== null) {
+          // fallback: couldn't split efectivo/tarjeta, but got a total — put it in efectivo so nothing is lost
+          setEfectivoVal(f.total.toFixed(2));
+          filled.push('total (revisa efectivo/tarjeta)');
+        }
+        if (filled.length) {
+          setScanNote(`Detectado: ${filled.join(', ')} — revisa antes de guardar.`);
+        } else {
+          setScanNote("No he podido leer los importes. Escríbelos a mano.");
+        }
+      })
+      .catch(() => setScanNote("Error al leer la foto. Inténtalo de nuevo."))
+      .finally(() => setScanning(false));
   }
 
   return (
@@ -498,9 +723,14 @@ function App(){
 
       <div className="summary-card">
         <div className="summary-total-label">Total del mes</div>
-        <div className="summary-total">{loading ? "…" : fmtEUR(total)}</div>
+        <div className="summary-total">{loading ? "…" : fmtEUR(totals.total)}</div>
         <div className="summary-row">
-          <span>Días registrados: <b>{loading ? "-" : numDays}</b></span>
+          <span>Efectivo: <b>{loading ? "-" : fmtEUR(totals.efectivo)}</b></span>
+          <span>Tarjeta: <b>{loading ? "-" : fmtEUR(totals.tarjeta)}</b></span>
+          {totals.otro > 0 && <span>Otros: <b>{fmtEUR(totals.otro)}</b></span>}
+        </div>
+        <div className="summary-row" style={{marginTop:6}}>
+          <span>Días: <b>{loading ? "-" : numDays}</b></span>
           <span>Media/día: <b>{loading ? "-" : fmtEUR(avg)}</b></span>
         </div>
       </div>
@@ -513,23 +743,74 @@ function App(){
       {scanNote && <p className="scan-note">{scanNote}</p>}
 
       <form className="entry-form" onSubmit={saveEntry}>
-        <div className="field">
-          <label htmlFor="f-date">Fecha</label>
-          <input id="f-date" type="date" value={dateVal} max={todayISO()}
-                 onChange={e => setDateVal(e.target.value)} required />
+        <div className="form-row">
+          <div className="field">
+            <label htmlFor="f-date">Fecha</label>
+            <input id="f-date" type="date" value={dateVal} max={todayISO()}
+                   onChange={e => setDateVal(e.target.value)} required />
+          </div>
         </div>
-        <div className="field">
-          <label htmlFor="f-amount">Total (€)</label>
-          <input id="f-amount" type="number" step="0.01" min="0" inputMode="decimal"
-                 placeholder="0,00" value={amountVal}
-                 onChange={e => setAmountVal(e.target.value)} required />
+        {(() => {
+          const [dy, dm, dd] = dateVal.split("-");
+          if (`${dy}-${dm}` !== key || !entries) return null;
+          const tickets = normalizeDayTickets(entries[dd]);
+          if (!tickets.length) return null;
+          const s = sumTickets(tickets);
+          return (
+            <p className="scan-note" style={{color:"var(--text-lo)"}}>
+              Ya llevas {tickets.length} ticket{tickets.length>1?'s':''} ese día · acumulado {fmtEUR(s.efectivo+s.tarjeta+s.otro)}
+            </p>
+          );
+        })()}
+
+        <div className="form-row">
+          <div className="field">
+            <label htmlFor="f-efectivo">Efectivo (€)</label>
+            <input id="f-efectivo" type="text" inputMode="decimal" placeholder="0,00"
+                   value={efectivoVal} onChange={e => setEfectivoVal(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="f-tarjeta">Tarjeta (€)</label>
+            <input id="f-tarjeta" type="text" inputMode="decimal" placeholder="0,00"
+                   value={tarjetaVal} onChange={e => setTarjetaVal(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="f-otro">Otros (Bizum, vales…)</label>
+            <input id="f-otro" type="text" inputMode="decimal" placeholder="0,00"
+                   value={otroVal} onChange={e => setOtroVal(e.target.value)} />
+          </div>
         </div>
+
+        <div className="form-total">
+          <span>Total de este ticket</span>
+          <span>{fmtEUR(formTotal)}</span>
+        </div>
+
+        <button type="button" className="iva-toggle" onClick={() => setShowIva(s => !s)}>
+          {showIva ? "− Ocultar desglose IVA" : "+ Añadir desglose IVA (opcional)"}
+        </button>
+
+        {showIva && (
+          <div className="form-row">
+            <div className="field">
+              <label htmlFor="f-base10">Base IVA 10%</label>
+              <input id="f-base10" type="text" inputMode="decimal" placeholder="0,00"
+                     value={base10Val} onChange={e => setBase10Val(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="f-base21">Base IVA 21%</label>
+              <input id="f-base21" type="text" inputMode="decimal" placeholder="0,00"
+                     value={base21Val} onChange={e => setBase21Val(e.target.value)} />
+            </div>
+          </div>
+        )}
+
         <button className="btn-save" type="submit" disabled={saving}>
-          {saving ? "..." : "Guardar"}
+          {saving ? "..." : "+ Añadir ticket"}
         </button>
       </form>
 
-      <p className="section-label">Este mes</p>
+      <p className="section-label">Este mes · ticket a ticket</p>
 
       {loading ? (
         <div className="empty-state">Cargando…</div>
@@ -539,18 +820,32 @@ function App(){
         sortedDays.map(day => {
           const [y, m] = key.split("-");
           const dateObj = new Date(Number(y), Number(m)-1, Number(day));
-          return (
-            <div className="ticket" key={day}>
-              <div>
-                <div className="ticket-date">{day}/{m}/{y}</div>
-                <div className="ticket-weekday">{DIAS[dateObj.getDay()]}</div>
+          const tickets = normalizeDayTickets(entries[day]);
+          return tickets.map((t, i) => {
+            const tot = Number(t.efectivo||0) + Number(t.tarjeta||0) + Number(t.otro||0);
+            return (
+              <div className="ticket" key={`${day}-${i}`}>
+                <div className="ticket-top">
+                  <div>
+                    <div className="ticket-date">{day}/{m}/{y}</div>
+                    <div className="ticket-weekday">
+                      {DIAS[dateObj.getDay()]}{tickets.length > 1 ? ` · ticket ${i+1}/${tickets.length}` : ""}
+                    </div>
+                  </div>
+                  <div style={{display:"flex", alignItems:"center"}}>
+                    <div className="ticket-amount">{fmtEUR(tot)}</div>
+                    <button className="ticket-del" onClick={() => deleteTicket(day, i)} aria-label="Borrar">✕</button>
+                  </div>
+                </div>
+                <div className="ticket-sub">
+                  <span>Efvo {fmtEUR(t.efectivo||0)}</span>
+                  <span>Tarj {fmtEUR(t.tarjeta||0)}</span>
+                  {t.otro > 0 && <span>Otros {fmtEUR(t.otro)}</span>}
+                  {(t.base10 || t.base21) ? <span>IVA 10/21 registrado</span> : null}
+                </div>
               </div>
-              <div style={{display:"flex", alignItems:"center"}}>
-                <div className="ticket-amount">{fmtEUR(entries[day])}</div>
-                <button className="ticket-del" onClick={() => deleteEntry(day)} aria-label="Borrar">✕</button>
-              </div>
-            </div>
-          );
+            );
+          });
         })
       )}
 
