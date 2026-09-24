@@ -636,7 +636,22 @@ function App(){
     const wb = XLSX.utils.book_new();
     const sheetName = `${MESES[Number(m)-1].slice(0,3)} ${y}`;
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
-    XLSX.writeFile(wb, `resumen_ventas_${y}-${m}.xlsx`);
+    const filename = `resumen_ventas_${y}-${m}.xlsx`;
+    try {
+      XLSX.writeFile(wb, filename);
+    } catch (err1) {
+      // Método alternativo por si el navegador bloquea la descarga automática
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
     return true;
   }
 
@@ -848,6 +863,10 @@ function App(){
           });
         })
       )}
+
+      <p style={{textAlign:"center", fontSize:"10px", color:"var(--text-lo)", fontFamily:"'JetBrains Mono', monospace", margin:"18px 0 90px"}}>
+        v2026-09-24.2
+      </p>
 
       <div className="export-bar">
         <button className="btn-export" onClick={exportMonth} disabled={exporting || numDays === 0}>
