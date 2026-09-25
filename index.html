@@ -349,6 +349,8 @@
     font-size: 13px;
     font-weight: 700;
     z-index: 50;
+    max-width: min(90vw, 380px);
+    text-align: center;
   }
 </style>
 </head>
@@ -505,7 +507,7 @@ function App(){
 
   function showToast(msg){
     setToast(msg);
-    setTimeout(() => setToast(null), 1800);
+    setTimeout(() => setToast(null), msg && msg.length > 40 ? 5000 : 1800);
   }
 
   const formTotal = num(efectivoVal) + num(tarjetaVal) + num(otroVal);
@@ -588,56 +590,110 @@ function App(){
   const numDays = sortedDays.length;
   const avg = numDays ? totals.total / numDays : 0;
 
+  function buildExcelForMonth(mkey, monthEntries){
+    if (typeof XLSX === 'undefined') {
+      throw new Error('No se pudo cargar la librería de Excel (revisa tu conexión a internet y recarga la página).');
+    }
+    const [y, m] = mkey.split("-");
+    const days = Object.keys(monthEntries).sort((a,b) => Number(a) - Number(b));
+    if (!days.length) return false;
+    const rows = [];
+    let t_efectivo = 0, t_tarjeta = 0, t_otro = 0, t_base10 = 0, t_base21 = 0;
+    days.forEach(day => {
+      const tickets = normalizeDayTickets(monthEntries[day]);
+      const dateObj = new Date(Number(y), Number(m)-1, Number(day));
+      tickets.forEach((t, i) => {
+        const tot = Number(t.efectivo||0) + Number(t.tarjeta||0) + Number(t.otro||0);
+        t_efectivo += Number(t.efectivo||0);
+        t_tarjeta += Number(t.tarjeta||0);
+        t_otro += Number(t.otro||0);
+        t_base10 += Number(t.base10||0);
+        t_base21 += Number(t.base21||0);
+        rows.push({
+          "Fecha": `${day}/${m}/${y}`,
+          "Día": DIAS[dateObj.getDay()],
+          "Ticket #": i + 1,
+          "Efectivo (€)": Number(t.efectivo || 0),
+          "Tarjeta (€)": Number(t.tarjeta || 0),
+          "Otros (€)": Number(t.otro || 0),
+          "Total (€)": Number(tot.toFixed(2)),
+          "Base IVA 10% (€)": t.base10 === null || t.base10 === undefined ? "" : Number(t.base10),
+          "Base IVA 21% (€)": t.base21 === null || t.base21 === undefined ? "" : Number(t.base21),
+        });
+      });
+    });
+    rows.push({
+      "Fecha": "", "Día": "", "Ticket #": "TOTAL",
+      "Efectivo (€)": Number(t_efectivo.toFixed(2)),
+      "Tarjeta (€)": Number(t_tarjeta.toFixed(2)),
+      "Otros (€)": Number(t_otro.toFixed(2)),
+      "Total (€)": Number((t_efectivo + t_tarjeta + t_otro).toFixed(2)),
+      "Base IVA 10% (€)": Number(t_base10.toFixed(2)),
+      "Base IVA 21% (€)": Number(t_base21.toFixed(2)),
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{wch:12},{wch:7},{wch:9},{wch:13},{wch:13},{wch:11},{wch:12},{wch:16},{wch:16}];
+    const wb = XLSX.utils.book_new();
+    const sheetName = `${MESES[Number(m)-1].slice(0,3)} ${y}`;
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    const filename = `resumen_ventas_${y}-${m}.xlsx`;
+    try {
+      XLSX.writeFile(wb, filename);
+    } catch (err1) {
+      // Método alternativo por si el navegador bloquea la descarga automática
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+    return true;
+  }
+
   function exportMonth(){
     if (!numDays) return;
     setExporting(true);
     try {
-      const [y, m] = key.split("-");
-      const rows = [];
-      sortedDays
-        .slice()
-        .sort((a,b) => Number(a) - Number(b))
-        .forEach(day => {
-          const tickets = normalizeDayTickets(entries[day]);
-          const dateObj = new Date(Number(y), Number(m)-1, Number(day));
-          tickets.forEach((t, i) => {
-            const tot = Number(t.efectivo||0) + Number(t.tarjeta||0) + Number(t.otro||0);
-            rows.push({
-              "Fecha": `${day}/${m}/${y}`,
-              "Día": DIAS[dateObj.getDay()],
-              "Ticket #": i + 1,
-              "Efectivo (€)": Number(t.efectivo || 0),
-              "Tarjeta (€)": Number(t.tarjeta || 0),
-              "Otros (€)": Number(t.otro || 0),
-              "Total (€)": Number(tot.toFixed(2)),
-              "Base IVA 10% (€)": t.base10 === null || t.base10 === undefined ? "" : Number(t.base10),
-              "Base IVA 21% (€)": t.base21 === null || t.base21 === undefined ? "" : Number(t.base21),
-            });
-          });
-        });
-      rows.push({
-        "Fecha": "", "Día": "", "Ticket #": "TOTAL",
-        "Efectivo (€)": Number(totals.efectivo.toFixed(2)),
-        "Tarjeta (€)": Number(totals.tarjeta.toFixed(2)),
-        "Otros (€)": Number(totals.otro.toFixed(2)),
-        "Total (€)": Number(totals.total.toFixed(2)),
-        "Base IVA 10% (€)": Number(totals.base10.toFixed(2)),
-        "Base IVA 21% (€)": Number(totals.base21.toFixed(2)),
-      });
-
-      const ws = XLSX.utils.json_to_sheet(rows);
-      ws['!cols'] = [{wch:12},{wch:7},{wch:9},{wch:13},{wch:13},{wch:11},{wch:12},{wch:16},{wch:16}];
-      const wb = XLSX.utils.book_new();
-      const sheetName = `${MESES[Number(m)-1].slice(0,3)} ${y}`;
-      XLSX.utils.book_append_sheet(wb, ws, sheetName);
-      XLSX.writeFile(wb, `resumen_ventas_${y}-${m}.xlsx`);
-      showToast("Excel generado");
+      const ok = buildExcelForMonth(key, entries || {});
+      if (ok) {
+        localStorage.setItem(`ventas:${key}:exported`, "1");
+        showToast("Excel generado");
+      }
     } catch (err) {
-      showToast("Error al exportar");
+      showToast("Error: " + (err && err.message ? err.message : "desconocido"));
     } finally {
       setExporting(false);
     }
   }
+
+  // Al abrir la app: si ya estamos en un mes nuevo y el mes anterior tiene
+  // datos sin exportar todavía, genera y descarga su Excel automáticamente.
+  useEffect(() => {
+    try {
+      const today = new Date();
+      const prevDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const prevKey = monthKey(prevDate);
+      const alreadyExported = localStorage.getItem(`ventas:${prevKey}:exported`) === "1";
+      if (alreadyExported) return;
+      const rawPrev = localStorage.getItem(`ventas:${prevKey}`);
+      if (!rawPrev) return;
+      const prevEntries = JSON.parse(rawPrev);
+      if (!Object.keys(prevEntries).length) return;
+      const ok = buildExcelForMonth(prevKey, prevEntries);
+      if (ok) {
+        localStorage.setItem(`ventas:${prevKey}:exported`, "1");
+        const [py, pm] = prevKey.split("-");
+        showToast(`Resumen de ${MESES[Number(pm)-1]} descargado automáticamente`);
+      }
+    } catch (err) {
+      // si algo falla aquí, no interrumpimos el uso normal de la app
+    }
+  }, []);
 
   function handleScan(e){
     const file = e.target.files && e.target.files[0];
@@ -807,6 +863,10 @@ function App(){
           });
         })
       )}
+
+      <p style={{textAlign:"center", fontSize:"10px", color:"var(--text-lo)", fontFamily:"'JetBrains Mono', monospace", margin:"18px 0 90px"}}>
+        v2026-09-24.2
+      </p>
 
       <div className="export-bar">
         <button className="btn-export" onClick={exportMonth} disabled={exporting || numDays === 0}>
