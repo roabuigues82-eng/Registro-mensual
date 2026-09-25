@@ -39,6 +39,28 @@
     padding: 28px 18px 100px;
   }
 
+  .top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+
+  .logout-link {
+    background: none;
+    border: none;
+    color: var(--text-lo);
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .eyebrow {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
@@ -290,21 +312,6 @@
     color: #6b6555;
   }
 
-  .ticket-list {
-    margin-top: 10px;
-    padding-top: 8px;
-    border-top: 1px dashed #c9c2ac;
-  }
-  .ticket-line {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    padding: 4px 0;
-    color: #4a453a;
-  }
-
   .empty-state {
     text-align: center;
     color: var(--text-lo);
@@ -352,6 +359,17 @@
     max-width: min(90vw, 380px);
     text-align: center;
   }
+
+  .auth-error {
+    font-size: 12px;
+    color: var(--danger);
+    margin: -2px 0 14px 2px;
+  }
+  .auth-info {
+    font-size: 12px;
+    color: var(--accent);
+    margin: -2px 0 14px 2px;
+  }
 </style>
 </head>
 <body>
@@ -362,9 +380,14 @@
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+<script crossorigin src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+const SUPABASE_URL = "https://uqiafgievxxlvqwjlzlt.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxaWFmZ2lldnh4bHZxd2psemx0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNTMwMTIsImV4cCI6MjEwNTkyOTAxMn0.OYxt2zUloqD52SB3Ui285HwvwvqY9rNivII6ZpHKHuI";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DIAS = ["dom","lun","mar","mié","jue","vie","sáb"];
@@ -383,17 +406,6 @@ function num(v){
   const n = parseFloat(String(v).replace(',', '.'));
   return isNaN(n) ? 0 : n;
 }
-function normalizeEntry(e){
-  // Compatibilidad con el formato anterior, donde cada día guardaba solo un número (el total)
-  if (typeof e === 'number') return { efectivo: e, tarjeta: 0, otro: 0, base10: null, base21: null };
-  return { otro: 0, ...(e || {}), efectivo: (e && e.efectivo) || 0, tarjeta: (e && e.tarjeta) || 0 };
-}
-function normalizeDayTickets(raw){
-  // Un día puede tener: nada, un número antiguo, un objeto único (v2), o una lista de tickets (v3)
-  if (raw === undefined || raw === null) return [];
-  if (Array.isArray(raw)) return raw.map(normalizeEntry);
-  return [normalizeEntry(raw)];
-}
 function sumTickets(tickets){
   return tickets.reduce((acc, t) => {
     acc.efectivo += Number(t.efectivo || 0);
@@ -403,6 +415,9 @@ function sumTickets(tickets){
     acc.base21 += Number(t.base21 || 0);
     return acc;
   }, { efectivo: 0, tarjeta: 0, otro: 0, base10: 0, base21: 0 });
+}
+function lastDayOfMonth(y, m){
+  return new Date(Number(y), Number(m), 0).getDate();
 }
 
 // --- OCR parsing helpers -------------------------------------------------
@@ -420,7 +435,6 @@ function firstNumberOnLine(line){
   return isNaN(n) ? null : n;
 }
 function leadingNumberOnLine(line){
-  // Toma el PRIMER número de la línea (útil para "10%  14,91  1,49" -> queremos 14,91, no la cuota 1,49)
   const m = line.match(NUM_RE);
   if (!m) return null;
   const n = toNumber(m[0]);
@@ -431,8 +445,6 @@ function extractFields(text){
   const result = { efectivo: null, tarjeta: null, otro: null, base10: null, base21: null, total: null };
   const noise = /subtotal|cambio|entreg|devuel/i;
 
-  // Busca un número en la propia línea, o si no hay, en las 2 líneas siguientes
-  // (algunos tickets ponen la etiqueta y el importe en líneas separadas)
   function findNearbyNumber(startIdx){
     for (let i = startIdx; i <= startIdx + 2 && i < lines.length; i++) {
       const n = firstNumberOnLine(lines[i]);
@@ -471,9 +483,71 @@ function extractFields(text){
   return result;
 }
 
-function App(){
+// --- Auth screen -----------------------------------------------------------
+function Auth(){
+  const [mode, setMode] = useState('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [info, setInfo] = useState(null);
+
+  async function submit(e){
+    e.preventDefault();
+    setBusy(true); setErr(null); setInfo(null);
+    try {
+      if (mode === 'login') {
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } else {
+        const { error } = await sb.auth.signUp({ email, password });
+        if (error) throw error;
+        setInfo('Cuenta creada. Si tu proyecto pide confirmación de email, revisa tu correo antes de entrar.');
+      }
+    } catch (e2) {
+      setErr(e2.message || 'Error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="app-shell">
+      <p className="eyebrow">Registro diario</p>
+      <h1>Ventas del día</h1>
+      <form className="entry-form" onSubmit={submit}>
+        <div className="form-row">
+          <div className="field">
+            <label htmlFor="a-email">Email del restaurante</label>
+            <input id="a-email" type="email" value={email} required
+                   onChange={e => setEmail(e.target.value)} />
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="field">
+            <label htmlFor="a-pass">Contraseña</label>
+            <input id="a-pass" type="password" value={password} required minLength={6}
+                   onChange={e => setPassword(e.target.value)} />
+          </div>
+        </div>
+        {err && <p className="auth-error">{err}</p>}
+        {info && <p className="auth-info">{info}</p>}
+        <button className="btn-save" type="submit" disabled={busy}>
+          {busy ? "..." : (mode === 'login' ? 'Entrar' : 'Crear cuenta')}
+        </button>
+      </form>
+      <button type="button" className="iva-toggle"
+              onClick={() => { setMode(m => m === 'login' ? 'signup' : 'login'); setErr(null); setInfo(null); }}>
+        {mode === 'login' ? '¿No tienes cuenta todavía? Crear una' : '¿Ya tienes cuenta? Entrar'}
+      </button>
+    </div>
+  );
+}
+
+// --- Main app (requires an authenticated session) ---------------------------
+function App({ session }){
   const [cursor, setCursor] = useState(new Date());
-  const [entries, setEntries] = useState(null); // {"01": {efectivo,tarjeta,base10,base21}, ...}
+  const [entries, setEntries] = useState(null); // {"01": [{id,efectivo,tarjeta,otro,base10,base21}, ...]}
   const [loading, setLoading] = useState(true);
   const [dateVal, setDateVal] = useState(todayISO());
   const [efectivoVal, setEfectivoVal] = useState("");
@@ -491,24 +565,53 @@ function App(){
 
   const key = monthKey(cursor);
 
-  const loadMonth = useCallback((mkey) => {
-    setLoading(true);
-    try {
-      const raw = localStorage.getItem(`ventas:${mkey}`);
-      setEntries(raw ? JSON.parse(raw) : {});
-    } catch (e) {
-      setEntries({});
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadMonth(key); }, [key, loadMonth]);
-
   function showToast(msg){
     setToast(msg);
     setTimeout(() => setToast(null), msg && msg.length > 40 ? 5000 : 1800);
   }
+
+  async function fetchMonth(mkey){
+    const [y, m] = mkey.split("-");
+    const first = `${y}-${m}-01`;
+    const last = `${y}-${m}-${pad(lastDayOfMonth(y, m))}`;
+    const { data, error } = await sb
+      .from('tickets')
+      .select('*')
+      .gte('fecha', first)
+      .lte('fecha', last)
+      .order('fecha', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    const grouped = {};
+    (data || []).forEach(row => {
+      const day = String(row.fecha).slice(8, 10);
+      if (!grouped[day]) grouped[day] = [];
+      grouped[day].push({
+        id: row.id,
+        efectivo: Number(row.efectivo) || 0,
+        tarjeta: Number(row.tarjeta) || 0,
+        otro: Number(row.otro) || 0,
+        base10: row.base10 === null || row.base10 === undefined ? null : Number(row.base10),
+        base21: row.base21 === null || row.base21 === undefined ? null : Number(row.base21),
+      });
+    });
+    return grouped;
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchMonth(key)
+      .then(grouped => { if (!cancelled) { setEntries(grouped); setLoading(false); } })
+      .catch(err => {
+        if (!cancelled) {
+          showToast("Error al cargar: " + (err.message || "desconocido"));
+          setEntries({});
+          setLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [key]);
 
   const formTotal = num(efectivoVal) + num(tarjetaVal) + num(otroVal);
 
@@ -521,46 +624,55 @@ function App(){
     setScanNote(null);
   }
 
-  function saveEntry(e){
+  async function saveEntry(e){
     e.preventDefault();
     if (!dateVal || (efectivoVal === "" && tarjetaVal === "" && otroVal === "")) return;
-    const [y, m, d] = dateVal.split("-");
-    const mkey = `${y}-${m}`;
     setSaving(true);
     try {
-      const raw = mkey === key ? (entries ? entries[d] : undefined) : JSON.parse(localStorage.getItem(`ventas:${mkey}`) || "{}")[d];
-      const currentMonthData = mkey === key ? (entries || {}) : JSON.parse(localStorage.getItem(`ventas:${mkey}`) || "{}");
-      const dayTickets = normalizeDayTickets(raw);
-      dayTickets.push({
+      const payload = {
+        fecha: dateVal,
         efectivo: num(efectivoVal),
         tarjeta: num(tarjetaVal),
         otro: num(otroVal),
         base10: base10Val === "" ? null : num(base10Val),
         base21: base21Val === "" ? null : num(base21Val),
-      });
-      const updated = { ...currentMonthData, [d]: dayTickets };
-      localStorage.setItem(`ventas:${mkey}`, JSON.stringify(updated));
-      if (mkey === key) setEntries(updated);
-      if (mkey !== key) setCursor(new Date(Number(y), Number(m) - 1, 1));
+      };
+      const { data, error } = await sb.from('tickets').insert(payload).select().single();
+      if (error) throw error;
+      const [y, m, d] = dateVal.split("-");
+      const mkey = `${y}-${m}`;
+      const newTicket = { id: data.id, efectivo: payload.efectivo, tarjeta: payload.tarjeta, otro: payload.otro, base10: payload.base10, base21: payload.base21 };
+      if (mkey === key) {
+        setEntries(prev => {
+          const updated = { ...(prev || {}) };
+          updated[d] = [...(updated[d] || []), newTicket];
+          return updated;
+        });
+        showToast((entries && entries[d] ? entries[d].length + 1 : 1) > 1 ? "Ticket añadido" : "Guardado");
+      } else {
+        setCursor(new Date(Number(y), Number(m) - 1, 1));
+        showToast("Guardado");
+      }
       resetForm();
-      showToast(dayTickets.length > 1 ? `Ticket añadido (${dayTickets.length} ese día)` : "Guardado");
     } catch (err) {
-      showToast("Error al guardar");
+      showToast("Error al guardar: " + (err.message || "desconocido"));
     } finally {
       setSaving(false);
     }
   }
 
-  function deleteTicket(day, idx){
-    const dayTickets = normalizeDayTickets(entries[day]).filter((_, i) => i !== idx);
-    const updated = { ...entries };
-    if (dayTickets.length) updated[day] = dayTickets;
-    else delete updated[day];
+  async function deleteTicket(day, id){
     try {
-      localStorage.setItem(`ventas:${key}`, JSON.stringify(updated));
-      setEntries(updated);
+      const { error } = await sb.from('tickets').delete().eq('id', id);
+      if (error) throw error;
+      setEntries(prev => {
+        const updated = { ...prev };
+        const filtered = (updated[day] || []).filter(t => t.id !== id);
+        if (filtered.length) updated[day] = filtered; else delete updated[day];
+        return updated;
+      });
     } catch (err) {
-      showToast("Error al borrar");
+      showToast("Error al borrar: " + (err.message || ""));
     }
   }
 
@@ -575,15 +687,16 @@ function App(){
   }, [entries]);
 
   const totals = useMemo(() => {
-    if (!entries) return { total: 0, efectivo: 0, tarjeta: 0, base10: 0, base21: 0 };
-    return Object.values(entries).reduce((acc, raw) => {
-      const s = sumTickets(normalizeDayTickets(raw));
+    if (!entries) return { total: 0, efectivo: 0, tarjeta: 0, otro: 0, base10: 0, base21: 0 };
+    return Object.values(entries).reduce((acc, tickets) => {
+      const s = sumTickets(tickets);
       acc.efectivo += s.efectivo;
       acc.tarjeta += s.tarjeta;
+      acc.otro += s.otro;
       acc.base10 += s.base10;
       acc.base21 += s.base21;
       return acc;
-    }, { efectivo: 0, tarjeta: 0, base10: 0, base21: 0 });
+    }, { efectivo: 0, tarjeta: 0, otro: 0, base10: 0, base21: 0 });
   }, [entries]);
   totals.total = totals.efectivo + totals.tarjeta + totals.otro;
 
@@ -600,7 +713,7 @@ function App(){
     const rows = [];
     let t_efectivo = 0, t_tarjeta = 0, t_otro = 0, t_base10 = 0, t_base21 = 0;
     days.forEach(day => {
-      const tickets = normalizeDayTickets(monthEntries[day]);
+      const tickets = monthEntries[day];
       const dateObj = new Date(Number(y), Number(m)-1, Number(day));
       tickets.forEach((t, i) => {
         const tot = Number(t.efectivo||0) + Number(t.tarjeta||0) + Number(t.otro||0);
@@ -640,7 +753,6 @@ function App(){
     try {
       XLSX.writeFile(wb, filename);
     } catch (err1) {
-      // Método alternativo por si el navegador bloquea la descarga automática
       const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = URL.createObjectURL(blob);
@@ -655,13 +767,22 @@ function App(){
     return true;
   }
 
-  function exportMonth(){
+  async function isExported(mkey){
+    const { data, error } = await sb.from('exported_months').select('month_key').eq('month_key', mkey).maybeSingle();
+    if (error) return false;
+    return !!data;
+  }
+  async function markExported(mkey){
+    try { await sb.from('exported_months').insert({ month_key: mkey }); } catch (e) { /* ya existía, ignorar */ }
+  }
+
+  async function exportMonth(){
     if (!numDays) return;
     setExporting(true);
     try {
       const ok = buildExcelForMonth(key, entries || {});
       if (ok) {
-        localStorage.setItem(`ventas:${key}:exported`, "1");
+        await markExported(key);
         showToast("Excel generado");
       }
     } catch (err) {
@@ -671,28 +792,28 @@ function App(){
     }
   }
 
-  // Al abrir la app: si ya estamos en un mes nuevo y el mes anterior tiene
-  // datos sin exportar todavía, genera y descarga su Excel automáticamente.
+  // Al iniciar sesión: si el mes anterior tiene tickets sin exportar todavía,
+  // genera y descarga su Excel automáticamente (una sola vez por mes).
   useEffect(() => {
-    try {
-      const today = new Date();
-      const prevDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      const prevKey = monthKey(prevDate);
-      const alreadyExported = localStorage.getItem(`ventas:${prevKey}:exported`) === "1";
-      if (alreadyExported) return;
-      const rawPrev = localStorage.getItem(`ventas:${prevKey}`);
-      if (!rawPrev) return;
-      const prevEntries = JSON.parse(rawPrev);
-      if (!Object.keys(prevEntries).length) return;
-      const ok = buildExcelForMonth(prevKey, prevEntries);
-      if (ok) {
-        localStorage.setItem(`ventas:${prevKey}:exported`, "1");
-        const [py, pm] = prevKey.split("-");
-        showToast(`Resumen de ${MESES[Number(pm)-1]} descargado automáticamente`);
+    (async () => {
+      try {
+        const today = new Date();
+        const prevDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const prevKey = monthKey(prevDate);
+        const already = await isExported(prevKey);
+        if (already) return;
+        const grouped = await fetchMonth(prevKey);
+        if (!Object.keys(grouped).length) return;
+        const ok = buildExcelForMonth(prevKey, grouped);
+        if (ok) {
+          await markExported(prevKey);
+          const [, pm] = prevKey.split("-");
+          showToast(`Resumen de ${MESES[Number(pm)-1]} descargado automáticamente`);
+        }
+      } catch (err) {
+        // no interrumpir el uso normal de la app si esto falla
       }
-    } catch (err) {
-      // si algo falla aquí, no interrumpimos el uso normal de la app
-    }
+    })();
   }, []);
 
   function handleScan(e){
@@ -711,7 +832,6 @@ function App(){
         if (f.base10 !== null) { setBase10Val(f.base10.toFixed(2)); setShowIva(true); }
         if (f.base21 !== null) { setBase21Val(f.base21.toFixed(2)); setShowIva(true); }
         if (!filled.length && f.total !== null) {
-          // fallback: couldn't split efectivo/tarjeta, but got a total — put it in efectivo so nothing is lost
           setEfectivoVal(f.total.toFixed(2));
           filled.push('total (revisa efectivo/tarjeta)');
         }
@@ -727,7 +847,12 @@ function App(){
 
   return (
     <div className="app-shell">
-      <p className="eyebrow">Registro diario</p>
+      <div className="top-row">
+        <p className="eyebrow" style={{margin:0}}>Registro diario</p>
+        <button type="button" className="logout-link" onClick={() => sb.auth.signOut()} title="Cerrar sesión">
+          {session.user.email} · salir
+        </button>
+      </div>
       <h1>Ventas del día</h1>
 
       <div className="month-nav">
@@ -768,7 +893,7 @@ function App(){
         {(() => {
           const [dy, dm, dd] = dateVal.split("-");
           if (`${dy}-${dm}` !== key || !entries) return null;
-          const tickets = normalizeDayTickets(entries[dd]);
+          const tickets = entries[dd] || [];
           if (!tickets.length) return null;
           const s = sumTickets(tickets);
           return (
@@ -835,11 +960,11 @@ function App(){
         sortedDays.map(day => {
           const [y, m] = key.split("-");
           const dateObj = new Date(Number(y), Number(m)-1, Number(day));
-          const tickets = normalizeDayTickets(entries[day]);
+          const tickets = entries[day] || [];
           return tickets.map((t, i) => {
             const tot = Number(t.efectivo||0) + Number(t.tarjeta||0) + Number(t.otro||0);
             return (
-              <div className="ticket" key={`${day}-${i}`}>
+              <div className="ticket" key={t.id}>
                 <div className="ticket-top">
                   <div>
                     <div className="ticket-date">{day}/{m}/{y}</div>
@@ -849,7 +974,7 @@ function App(){
                   </div>
                   <div style={{display:"flex", alignItems:"center"}}>
                     <div className="ticket-amount">{fmtEUR(tot)}</div>
-                    <button className="ticket-del" onClick={() => deleteTicket(day, i)} aria-label="Borrar">✕</button>
+                    <button className="ticket-del" onClick={() => deleteTicket(day, t.id)} aria-label="Borrar">✕</button>
                   </div>
                 </div>
                 <div className="ticket-sub">
@@ -865,7 +990,7 @@ function App(){
       )}
 
       <p style={{textAlign:"center", fontSize:"10px", color:"var(--text-lo)", fontFamily:"'JetBrains Mono', monospace", margin:"18px 0 90px"}}>
-        v2026-09-24.2
+        v-cloud.1 · Supabase
       </p>
 
       <div className="export-bar">
@@ -879,7 +1004,24 @@ function App(){
   );
 }
 
-ReactDOM.createRoot(document.getElementById('app-root')).render(<App />);
+// --- Root: decides Auth vs App based on session -----------------------------
+function Root(){
+  const [session, setSession] = useState(undefined); // undefined = comprobando, null = sin sesión
+
+  useEffect(() => {
+    sb.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: listener } = sb.auth.onAuthStateChange((_event, sess) => setSession(sess));
+    return () => { listener && listener.subscription && listener.subscription.unsubscribe(); };
+  }, []);
+
+  if (session === undefined) {
+    return <div className="app-shell"><div className="empty-state">Cargando…</div></div>;
+  }
+  if (!session) return <Auth />;
+  return <App session={session} key={session.user.id} />;
+}
+
+ReactDOM.createRoot(document.getElementById('app-root')).render(<Root />);
 </script>
 </body>
 </html>
