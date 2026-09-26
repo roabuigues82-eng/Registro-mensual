@@ -195,6 +195,23 @@
   }
   .field input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+  .pass-wrap { position: relative; }
+  .pass-wrap input { padding-right: 62px; }
+  .pass-toggle {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 4px 6px;
+  }
+
   .form-total {
     display: flex;
     justify-content: space-between;
@@ -490,6 +507,7 @@ function Auth(){
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [info, setInfo] = useState(null);
@@ -546,7 +564,7 @@ function Auth(){
         )}
         <div className="form-row">
           <div className="field">
-            <label htmlFor="a-email">Email del negocio</label>
+            <label htmlFor="a-email">Email</label>
             <input id="a-email" type="email" value={email} required
                    onChange={e => setEmail(e.target.value)} />
           </div>
@@ -554,8 +572,13 @@ function Auth(){
         <div className="form-row">
           <div className="field">
             <label htmlFor="a-pass">Contraseña</label>
-            <input id="a-pass" type="password" value={password} required minLength={6}
-                   onChange={e => setPassword(e.target.value)} />
+            <div className="pass-wrap">
+              <input id="a-pass" type={showPass ? "text" : "password"} value={password} required minLength={6}
+                     onChange={e => setPassword(e.target.value)} />
+              <button type="button" className="pass-toggle" onClick={() => setShowPass(s => !s)}>
+                {showPass ? "OCULTAR" : "MOSTRAR"}
+              </button>
+            </div>
           </div>
         </div>
         {err && <p className="auth-error">{err}</p>}
@@ -1116,6 +1139,7 @@ function App({ session }){
 // --- Se muestra cuando el usuario llega desde un enlace de recuperación de contraseña
 function SetNewPassword({ onDone }){
   const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -1141,8 +1165,13 @@ function SetNewPassword({ onDone }){
         <div className="form-row">
           <div className="field">
             <label htmlFor="np-pass">Nueva contraseña</label>
-            <input id="np-pass" type="password" value={password} required minLength={6}
-                   onChange={e => setPassword(e.target.value)} />
+            <div className="pass-wrap">
+              <input id="np-pass" type={showPass ? "text" : "password"} value={password} required minLength={6}
+                     onChange={e => setPassword(e.target.value)} />
+              <button type="button" className="pass-toggle" onClick={() => setShowPass(s => !s)}>
+                {showPass ? "OCULTAR" : "MOSTRAR"}
+              </button>
+            </div>
           </div>
         </div>
         {err && <p className="auth-error">{err}</p>}
