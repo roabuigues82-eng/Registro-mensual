@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ventas del día</title>
+<title>Caja — Control de caja para tu negocio</title>
 <style>
   html, body { margin: 0; padding: 0; background: #12151a; min-height: 100vh; }
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Manrope:wght@400;500;600;700;800&display=swap');
@@ -23,1190 +23,290 @@
 
   * { box-sizing: border-box; }
 
-  #app-root {
+  body {
     background: var(--ink);
     color: var(--text-hi);
     font-family: 'Manrope', sans-serif;
-    min-height: 100%;
-    padding: 0;
-    display: flex;
-    justify-content: center;
   }
 
-  .app-shell {
-    width: 100%;
-    max-width: 440px;
-    padding: 28px 18px 100px;
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0 20px;
   }
 
-  .top-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 4px;
-  }
-
-  .logout-link {
-    background: none;
-    border: none;
-    color: var(--text-lo);
-    font-size: 11px;
+  .mono {
     font-family: 'JetBrains Mono', monospace;
-    cursor: pointer;
-    text-decoration: underline;
-    padding: 0;
-    max-width: 60%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
+  /* ---- Nav ---- */
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 22px 0;
+  }
+  .logo {
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: -0.01em;
+  }
+  .logo span { color: var(--accent); }
+  .nav-cta {
+    background: var(--ink-soft);
+    border: 1px solid var(--rule);
+    color: var(--text-hi);
+    padding: 9px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  /* ---- Hero ---- */
+  .hero {
+    padding: 48px 0 40px;
+    text-align: center;
+  }
   .eyebrow {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--accent);
-    margin: 0 0 4px;
+    margin: 0 0 14px;
   }
-
   h1 {
-    font-size: 26px;
+    font-size: 38px;
+    line-height: 1.15;
     font-weight: 800;
-    margin: 0 0 20px;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
+    margin: 0 0 18px;
   }
-
-  .month-nav {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 18px;
-  }
-
-  .month-nav button {
-    background: var(--ink-soft);
-    border: 1px solid var(--rule);
-    color: var(--text-hi);
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+  .hero p {
     font-size: 16px;
-    cursor: pointer;
-  }
-  .month-nav button:active { transform: scale(0.95); }
-
-  .month-label {
-    font-weight: 700;
-    font-size: 16px;
-    text-transform: capitalize;
-  }
-
-  .summary-card {
-    background: linear-gradient(160deg, var(--accent-dim), var(--ink-soft));
-    border: 1px solid var(--rule);
-    border-radius: 18px;
-    padding: 20px 20px 16px;
-    margin-bottom: 22px;
-  }
-
-  .summary-total-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
+    line-height: 1.6;
     color: var(--text-lo);
+    max-width: 480px;
+    margin: 0 auto 30px;
   }
-
-  .summary-total {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 40px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    margin: 4px 0 14px;
-    color: var(--text-hi);
-  }
-
-  .summary-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 22px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
-    color: var(--text-lo);
-  }
-  .summary-row b { color: var(--text-hi); font-weight: 600; }
-
-  .btn-scan {
-    width: 100%;
-    background: var(--ink-soft);
-    border: 1px dashed var(--accent);
-    color: var(--text-hi);
-    padding: 13px;
-    border-radius: 12px;
-    font-weight: 700;
-    font-size: 14px;
-    cursor: pointer;
-    margin-bottom: 10px;
-  }
-  .btn-scan:active { transform: scale(0.98); }
-  .btn-scan:disabled { opacity: 0.6; }
-
-  .scan-note {
-    font-size: 12px;
-    color: var(--accent);
-    margin: -2px 0 14px 2px;
-  }
-
-  .entry-form {
-    background: var(--ink-soft);
-    border: 1px solid var(--rule);
-    border-radius: 16px;
-    padding: 16px;
-    margin-bottom: 14px;
-  }
-
-  .form-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-
-  .field { flex: 1 1 130px; min-width: 0; }
-  .field label {
-    display: block;
-    font-size: 11px;
-    color: var(--text-lo);
-    margin-bottom: 6px;
-    font-family: 'JetBrains Mono', monospace;
-    letter-spacing: 0.05em;
-  }
-  .field input {
-    width: 100%;
-    min-width: 0;
-    background: var(--ink);
-    border: 1px solid var(--rule);
-    color: var(--text-hi);
-    padding: 10px 10px;
-    border-radius: 10px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 15px;
-  }
-  .field input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-
-  .pass-wrap { position: relative; }
-  .pass-wrap input { padding-right: 62px; }
-  .pass-toggle {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: none;
-    border: none;
-    color: var(--accent);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    font-weight: 700;
-    cursor: pointer;
-    padding: 4px 6px;
-  }
-
-  .form-total {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    font-family: 'JetBrains Mono', monospace;
-    padding: 8px 2px 12px;
-    border-bottom: 1px dashed var(--rule);
-    margin-bottom: 12px;
-  }
-  .form-total span:first-child {
-    font-size: 11px;
-    color: var(--text-lo);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-  }
-  .form-total span:last-child {
-    font-size: 20px;
-    font-weight: 700;
-  }
-
-  .iva-toggle {
-    background: none;
-    border: none;
-    color: var(--text-lo);
-    font-size: 12px;
-    font-family: 'JetBrains Mono', monospace;
-    cursor: pointer;
-    padding: 0 0 10px;
-    text-decoration: underline;
-  }
-
-  .btn-save {
-    width: 100%;
+  .btn-primary {
+    display: inline-block;
     background: var(--accent);
     color: #08130e;
-    border: none;
     font-weight: 800;
-    padding: 12px 16px;
-    border-radius: 10px;
-    font-size: 14px;
-    cursor: pointer;
+    font-size: 15px;
+    padding: 15px 30px;
+    border-radius: 12px;
+    text-decoration: none;
   }
-  .btn-save:disabled { opacity: 0.5; cursor: default; }
-  .btn-save:active { transform: scale(0.97); }
-
-  .section-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
+  .hero-sub {
+    margin-top: 14px;
+    font-size: 12px;
     color: var(--text-lo);
-    margin: 0 0 10px 4px;
+    font-family: 'JetBrains Mono', monospace;
   }
 
-  .ticket {
+  /* ---- Ticket visual ---- */
+  .ticket-demo {
     position: relative;
     background: var(--paper);
     color: var(--ink);
     border-radius: 4px;
-    padding: 12px 14px;
-    margin-bottom: 10px;
-    box-shadow: 0 6px 14px -8px rgba(0,0,0,0.5);
+    padding: 20px 22px;
+    margin: 40px auto 0;
+    max-width: 320px;
+    text-align: left;
+    box-shadow: 0 20px 50px -20px rgba(0,0,0,0.6);
   }
-  .ticket::before, .ticket::after {
+  .ticket-demo::before, .ticket-demo::after {
     content: "";
     position: absolute;
     left: 0; right: 0;
-    height: 6px;
-    background:
-      radial-gradient(circle at 6px 3px, var(--ink) 3px, transparent 3.5px) repeat-x;
-    background-size: 12px 6px;
+    height: 7px;
+    background: radial-gradient(circle at 7px 3.5px, var(--ink) 3.5px, transparent 4px) repeat-x;
+    background-size: 14px 7px;
   }
-  .ticket::before { top: -3px; }
-  .ticket::after { bottom: -3px; transform: rotate(180deg); }
-
-  .ticket-top {
+  .ticket-demo::before { top: -3.5px; }
+  .ticket-demo::after { bottom: -3.5px; transform: rotate(180deg); }
+  .ticket-demo .row {
     display: flex;
-    align-items: center;
     justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    padding: 5px 0;
+    border-bottom: 1px dashed #c9c2ac;
   }
+  .ticket-demo .row:last-child { border-bottom: none; }
+  .ticket-demo .row.total { font-weight: 800; font-size: 15px; padding-top: 10px; }
+  .ticket-demo .label { color: #6b6555; }
 
-  .ticket-date {
-    font-family: 'JetBrains Mono', monospace;
-    font-weight: 700;
-    font-size: 14px;
+  /* ---- Features ---- */
+  .features {
+    padding: 60px 0;
+    border-top: 1px solid var(--rule);
   }
-  .ticket-weekday {
-    font-size: 10px;
-    color: #6b6555;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-top: 1px;
-  }
-  .ticket-amount {
-    font-family: 'JetBrains Mono', monospace;
-    font-weight: 700;
-    font-size: 16px;
-    font-variant-numeric: tabular-nums;
-  }
-  .ticket-del {
-    background: none;
-    border: none;
-    color: var(--danger);
-    font-size: 16px;
-    cursor: pointer;
-    padding: 4px 0 4px 12px;
-    line-height: 1;
-  }
-  .ticket-sub {
-    display: flex;
-    gap: 14px;
-    margin-top: 6px;
+  .section-title {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
-    color: #6b6555;
-  }
-
-  .empty-state {
-    text-align: center;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
     color: var(--text-lo);
+    text-align: center;
+    margin: 0 0 34px;
+  }
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 560px) {
+    .feature-grid { grid-template-columns: 1fr; }
+    h1 { font-size: 30px; }
+  }
+  .feature-card {
+    background: var(--ink-soft);
+    border: 1px solid var(--rule);
+    border-radius: 16px;
+    padding: 22px;
+  }
+  .feature-card .icon { font-size: 22px; margin-bottom: 12px; display: block; }
+  .feature-card h3 {
+    font-size: 15px;
+    margin: 0 0 8px;
+    font-weight: 700;
+  }
+  .feature-card p {
     font-size: 13px;
-    padding: 30px 10px;
-    border: 1px dashed var(--rule);
-    border-radius: 14px;
+    line-height: 1.55;
+    color: var(--text-lo);
+    margin: 0;
   }
 
-  .export-bar {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    display: flex;
-    justify-content: center;
-    padding: 14px 18px;
-    background: linear-gradient(to top, var(--ink) 60%, transparent);
+  /* ---- Pricing ---- */
+  .pricing {
+    padding: 20px 0 60px;
   }
-  .btn-export {
-    width: 100%;
-    max-width: 404px;
-    background: var(--text-hi);
-    color: var(--ink);
-    border: none;
-    padding: 14px;
-    border-radius: 12px;
+  .price-card {
+    background: linear-gradient(160deg, var(--accent-dim), var(--ink-soft));
+    border: 1px solid var(--rule);
+    border-radius: 20px;
+    padding: 36px 28px;
+    text-align: center;
+    max-width: 360px;
+    margin: 0 auto;
+  }
+  .price-card .amount {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 44px;
     font-weight: 800;
-    font-size: 14px;
-    cursor: pointer;
-    letter-spacing: 0.02em;
+    margin: 6px 0 2px;
   }
-  .btn-export:active { transform: scale(0.98); }
-  .btn-export:disabled { opacity: 0.4; }
-
-  .toast {
-    position: fixed;
-    top: 18px; left: 50%;
-    transform: translateX(-50%);
+  .price-card .amount span { font-size: 16px; color: var(--text-lo); font-weight: 500; }
+  .price-card .trial {
+    display: inline-block;
     background: var(--accent);
     color: #08130e;
-    padding: 9px 16px;
-    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 100px;
+    margin-bottom: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.04em;
+  }
+  .price-list {
+    list-style: none;
+    padding: 0;
+    margin: 22px 0 26px;
+    text-align: left;
     font-size: 13px;
-    font-weight: 700;
-    z-index: 50;
-    max-width: min(90vw, 380px);
-    text-align: center;
+    color: var(--text-hi);
   }
+  .price-list li {
+    padding: 6px 0;
+    display: flex;
+    gap: 8px;
+  }
+  .price-list li::before { content: "✓"; color: var(--accent); font-weight: 800; }
 
-  .auth-error {
+  /* ---- Footer ---- */
+  footer {
+    border-top: 1px solid var(--rule);
+    padding: 26px 0 40px;
+    text-align: center;
     font-size: 12px;
-    color: var(--danger);
-    margin: -2px 0 14px 2px;
-  }
-  .auth-info {
-    font-size: 12px;
-    color: var(--accent);
-    margin: -2px 0 14px 2px;
+    color: var(--text-lo);
+    font-family: 'JetBrains Mono', monospace;
   }
 </style>
 </head>
 <body>
-<div id="app-root"></div>
+  <div class="wrap">
+    <nav>
+      <div class="logo">Ca<span>ja</span></div>
+      <a class="nav-cta" href="app.html">Entrar</a>
+    </nav>
 
-<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
-<script crossorigin src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <section class="hero">
+      <p class="eyebrow">Control de caja para cualquier negocio</p>
+      <h1>Cada ticket, apuntado en segundos.<br>El mes, cerrado solo.</h1>
+      <p>Registra las ventas del día a mano o con la cámara, y ten el resumen del mes listo para tu gestoría sin abrir un Excel.</p>
+      <a class="btn-primary" href="app.html">Empezar gratis</a>
+      <div class="hero-sub">Sin tarjeta para probar · primer mes gratis</div>
 
-<script type="text/babel" data-presets="react">
-const { useState, useEffect, useMemo, useCallback, useRef } = React;
+      <div class="ticket-demo">
+        <div class="row"><span class="label">Efectivo</span><span>124,50 €</span></div>
+        <div class="row"><span class="label">Tarjeta</span><span>318,20 €</span></div>
+        <div class="row"><span class="label">Otros</span><span>15,00 €</span></div>
+        <div class="row total"><span>Total del día</span><span>457,70 €</span></div>
+      </div>
+    </section>
 
-const SUPABASE_URL = "https://uqiafgievxxlvqwjlzlt.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxaWFmZ2lldnh4bHZxd2psemx0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNTMwMTIsImV4cCI6MjEwNTkyOTAxMn0.OYxt2zUloqD52SB3Ui285HwvwvqY9rNivII6ZpHKHuI";
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/test_5kQbIU9q64ug7Asf663oA00";
-
-const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
-const DIAS = ["dom","lun","mar","mié","jue","vie","sáb"];
-
-function pad(n){ return String(n).padStart(2,"0"); }
-function monthKey(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}`; }
-function todayISO(){
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-}
-function fmtEUR(n){
-  return new Intl.NumberFormat('es-ES', {style:'currency', currency:'EUR'}).format(n || 0);
-}
-function num(v){
-  if (v === "" || v === null || v === undefined) return 0;
-  const n = parseFloat(String(v).replace(',', '.'));
-  return isNaN(n) ? 0 : n;
-}
-function sumTickets(tickets){
-  return tickets.reduce((acc, t) => {
-    acc.efectivo += Number(t.efectivo || 0);
-    acc.tarjeta += Number(t.tarjeta || 0);
-    acc.otro += Number(t.otro || 0);
-    acc.base10 += Number(t.base10 || 0);
-    acc.base21 += Number(t.base21 || 0);
-    return acc;
-  }, { efectivo: 0, tarjeta: 0, otro: 0, base10: 0, base21: 0 });
-}
-function lastDayOfMonth(y, m){
-  return new Date(Number(y), Number(m), 0).getDate();
-}
-
-// --- OCR parsing helpers -------------------------------------------------
-const NUM_RE = /\d{1,3}(?:[.,]\d{3})*[.,]\d{2}/g;
-function toNumber(c){
-  let v = c;
-  if (v.includes(',') && v.includes('.')) v = v.replace(/\./g, '').replace(',', '.');
-  else if (v.includes(',')) v = v.replace(',', '.');
-  return parseFloat(v);
-}
-function firstNumberOnLine(line){
-  const m = line.match(NUM_RE);
-  if (!m) return null;
-  const n = toNumber(m[m.length - 1]);
-  return isNaN(n) ? null : n;
-}
-function leadingNumberOnLine(line){
-  const m = line.match(NUM_RE);
-  if (!m) return null;
-  const n = toNumber(m[0]);
-  return isNaN(n) ? null : n;
-}
-function extractFields(text){
-  const lines = text.split('\n');
-  const result = { efectivo: null, tarjeta: null, otro: null, base10: null, base21: null, total: null };
-  const noise = /subtotal|cambio|entreg|devuel/i;
-
-  function findNearbyNumber(startIdx){
-    for (let i = startIdx; i <= startIdx + 2 && i < lines.length; i++) {
-      const n = firstNumberOnLine(lines[i]);
-      if (n !== null) return n;
-    }
-    return null;
-  }
-
-  for (let idx = 0; idx < lines.length; idx++) {
-    const line = lines[idx];
-    if (result.efectivo === null && /efectivo/i.test(line) && !noise.test(line)) {
-      const n = findNearbyNumber(idx);
-      if (n !== null) result.efectivo = n;
-    }
-    if (result.tarjeta === null && /(tarjeta|visa|master|d[eé]bito|cr[eé]dito|tpv)/i.test(line)) {
-      const n = findNearbyNumber(idx);
-      if (n !== null) result.tarjeta = n;
-    }
-    if (result.otro === null && /(bizum|vale|cheque|transferencia)/i.test(line)) {
-      const n = findNearbyNumber(idx);
-      if (n !== null) result.otro = n;
-    }
-    if (result.base10 === null && /10\s?%/.test(line)) {
-      const n = leadingNumberOnLine(line);
-      if (n !== null) result.base10 = n;
-    }
-    if (result.base21 === null && /21\s?%/.test(line)) {
-      const n = leadingNumberOnLine(line);
-      if (n !== null) result.base21 = n;
-    }
-    if (result.total === null && /total/i.test(line) && !noise.test(line)) {
-      const n = findNearbyNumber(idx);
-      if (n !== null) result.total = n;
-    }
-  }
-  return result;
-}
-
-// --- Auth screen -----------------------------------------------------------
-function Auth(){
-  const [mode, setMode] = useState('login');
-  const [nombre, setNombre] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPass, setShowPass] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
-  const [info, setInfo] = useState(null);
-
-  async function submit(e){
-    e.preventDefault();
-    setBusy(true); setErr(null); setInfo(null);
-    try {
-      if (mode === 'login') {
-        const { error } = await sb.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      } else {
-        const { error } = await sb.auth.signUp({
-          email, password,
-          options: { data: { nombre: nombre.trim() } }
-        });
-        if (error) throw error;
-        setInfo('Cuenta creada. Si tu proyecto pide confirmación de email, revisa tu correo antes de entrar.');
-      }
-    } catch (e2) {
-      setErr(e2.message || 'Error');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function forgotPassword(){
-    if (!email) { setErr('Escribe tu email arriba primero.'); return; }
-    setBusy(true); setErr(null); setInfo(null);
-    try {
-      const { error } = await sb.auth.resetPasswordForEmail(email);
-      if (error) throw error;
-      setInfo('Te hemos enviado un email con un enlace para elegir una contraseña nueva.');
-    } catch (e2) {
-      setErr(e2.message || 'Error');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="app-shell">
-      <p className="eyebrow">Registro diario</p>
-      <h1>Ventas del día</h1>
-      <form className="entry-form" onSubmit={submit}>
-        {mode === 'signup' && (
-          <div className="form-row">
-            <div className="field">
-              <label htmlFor="a-nombre">Nombre del negocio</label>
-              <input id="a-nombre" type="text" value={nombre} required
-                     onChange={e => setNombre(e.target.value)} />
-            </div>
-          </div>
-        )}
-        <div className="form-row">
-          <div className="field">
-            <label htmlFor="a-email">Email</label>
-            <input id="a-email" type="email" value={email} required
-                   onChange={e => setEmail(e.target.value)} />
-          </div>
+    <section class="features">
+      <p class="section-title">Cómo funciona</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <span class="icon">📷</span>
+          <h3>Escanea el ticket</h3>
+          <p>Hazle una foto y la app lee el importe sola, separando efectivo, tarjeta e IVA.</p>
         </div>
-        <div className="form-row">
-          <div className="field">
-            <label htmlFor="a-pass">Contraseña</label>
-            <div className="pass-wrap">
-              <input id="a-pass" type={showPass ? "text" : "password"} value={password} required minLength={6}
-                     onChange={e => setPassword(e.target.value)} />
-              <button type="button" className="pass-toggle" onClick={() => setShowPass(s => !s)}>
-                {showPass ? "OCULTAR" : "MOSTRAR"}
-              </button>
-            </div>
-          </div>
+        <div class="feature-card">
+          <span class="icon">➕</span>
+          <h3>Ticket a ticket</h3>
+          <p>Cada venta queda registrada al momento, con su fecha, sin perder ni un dato.</p>
         </div>
-        {err && <p className="auth-error">{err}</p>}
-        {info && <p className="auth-info">{info}</p>}
-        <button className="btn-save" type="submit" disabled={busy}>
-          {busy ? "..." : (mode === 'login' ? 'Entrar' : 'Crear cuenta')}
-        </button>
-      </form>
-      <button type="button" className="iva-toggle"
-              onClick={() => { setMode(m => m === 'login' ? 'signup' : 'login'); setErr(null); setInfo(null); }}>
-        {mode === 'login' ? '¿No tienes cuenta todavía? Crear una' : '¿Ya tienes cuenta? Entrar'}
-      </button>
-      {mode === 'login' && (
-        <button type="button" className="iva-toggle" style={{display:"block", marginTop:"4px"}}
-                onClick={forgotPassword} disabled={busy}>
-          He olvidado mi contraseña
-        </button>
-      )}
-    </div>
-  );
-}
-
-// --- Main app (requires an authenticated session) ---------------------------
-// --- Paywall: se muestra cuando terminó la prueba gratuita y no hay suscripción activa
-function Paywall({ session, onRecheck, checking }){
-  const payUrl = `${STRIPE_PAYMENT_LINK}?client_reference_id=${encodeURIComponent(session.user.id)}`;
-  return (
-    <div className="app-shell">
-      <div className="top-row">
-        <p className="eyebrow" style={{margin:0}}>Registro diario</p>
-        <button type="button" className="logout-link" onClick={() => sb.auth.signOut()} title="Cerrar sesión">
-          {(session.user.user_metadata && session.user.user_metadata.nombre) || session.user.email} · salir
-        </button>
-      </div>
-      <h1>Tu prueba ha terminado</h1>
-      <div className="summary-card">
-        <p style={{margin:"0 0 14px", fontSize:"14px", lineHeight:1.5}}>
-          Ya has probado la app (con tu primer mes o tu primer Excel exportado).
-          Para seguir usándola necesitas una suscripción activa.
-        </p>
-        <a href={payUrl} target="_blank" rel="noopener noreferrer" className="btn-export"
-           style={{display:"block", textAlign:"center", textDecoration:"none", position:"static", maxWidth:"none"}}>
-          Suscribirme
-        </a>
-      </div>
-      <button type="button" className="btn-scan" onClick={onRecheck} disabled={checking}>
-        {checking ? "Comprobando…" : "Ya he pagado, comprobar de nuevo"}
-      </button>
-    </div>
-  );
-}
-
-function App({ session }){
-  const [cursor, setCursor] = useState(new Date());
-  const [entries, setEntries] = useState(null); // {"01": [{id,efectivo,tarjeta,otro,base10,base21}, ...]}
-  const [loading, setLoading] = useState(true);
-  const [dateVal, setDateVal] = useState(todayISO());
-  const [efectivoVal, setEfectivoVal] = useState("");
-  const [tarjetaVal, setTarjetaVal] = useState("");
-  const [otroVal, setOtroVal] = useState("");
-  const [base10Val, setBase10Val] = useState("");
-  const [base21Val, setBase21Val] = useState("");
-  const [showIva, setShowIva] = useState(false);
-  const [toast, setToast] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [scanning, setScanning] = useState(false);
-  const [scanNote, setScanNote] = useState(null);
-  const fileInputRef = useRef(null);
-
-  const [access, setAccess] = useState('checking'); // 'checking' | 'ok' | 'locked'
-  const [accessChecking, setAccessChecking] = useState(false);
-
-  const key = monthKey(cursor);
-
-  const checkAccess = useCallback(async () => {
-    setAccessChecking(true);
-    try {
-      const created = new Date(session.user.created_at);
-      const secondMonthStart = new Date(created.getFullYear(), created.getMonth() + 1, 1);
-      const pastCalendarTrial = new Date() >= secondMonthStart;
-
-      const { count: exportCount } = await sb
-        .from('exported_months')
-        .select('month_key', { count: 'exact', head: true });
-      const hasExported = (exportCount || 0) > 0;
-
-      const trialOver = pastCalendarTrial || hasExported;
-
-      if (!trialOver) { setAccess('ok'); return; }
-
-      const { data: sub } = await sb
-        .from('subscriptions')
-        .select('status, current_period_end')
-        .eq('user_id', session.user.id)
-        .maybeSingle();
-
-      const isActive = sub && sub.status === 'active' &&
-        (!sub.current_period_end || new Date(sub.current_period_end) > new Date());
-
-      setAccess(isActive ? 'ok' : 'locked');
-    } catch (err) {
-      // si falla la comprobación, no bloqueamos por error técnico
-      setAccess('ok');
-    } finally {
-      setAccessChecking(false);
-    }
-  }, [session.user.id, session.user.created_at]);
-
-  useEffect(() => { checkAccess(); }, [checkAccess]);
-
-  function showToast(msg){
-    setToast(msg);
-    setTimeout(() => setToast(null), msg && msg.length > 40 ? 5000 : 1800);
-  }
-
-  async function fetchMonth(mkey){
-    const [y, m] = mkey.split("-");
-    const first = `${y}-${m}-01`;
-    const last = `${y}-${m}-${pad(lastDayOfMonth(y, m))}`;
-    const { data, error } = await sb
-      .from('tickets')
-      .select('*')
-      .gte('fecha', first)
-      .lte('fecha', last)
-      .order('fecha', { ascending: true })
-      .order('created_at', { ascending: true });
-    if (error) throw error;
-    const grouped = {};
-    (data || []).forEach(row => {
-      const day = String(row.fecha).slice(8, 10);
-      if (!grouped[day]) grouped[day] = [];
-      grouped[day].push({
-        id: row.id,
-        efectivo: Number(row.efectivo) || 0,
-        tarjeta: Number(row.tarjeta) || 0,
-        otro: Number(row.otro) || 0,
-        base10: row.base10 === null || row.base10 === undefined ? null : Number(row.base10),
-        base21: row.base21 === null || row.base21 === undefined ? null : Number(row.base21),
-      });
-    });
-    return grouped;
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    fetchMonth(key)
-      .then(grouped => { if (!cancelled) { setEntries(grouped); setLoading(false); } })
-      .catch(err => {
-        if (!cancelled) {
-          showToast("Error al cargar: " + (err.message || "desconocido"));
-          setEntries({});
-          setLoading(false);
-        }
-      });
-    return () => { cancelled = true; };
-  }, [key]);
-
-  const formTotal = num(efectivoVal) + num(tarjetaVal) + num(otroVal);
-
-  function resetForm(){
-    setEfectivoVal("");
-    setTarjetaVal("");
-    setOtroVal("");
-    setBase10Val("");
-    setBase21Val("");
-    setScanNote(null);
-  }
-
-  async function saveEntry(e){
-    e.preventDefault();
-    if (!dateVal || (efectivoVal === "" && tarjetaVal === "" && otroVal === "")) return;
-    setSaving(true);
-    try {
-      const payload = {
-        fecha: dateVal,
-        efectivo: num(efectivoVal),
-        tarjeta: num(tarjetaVal),
-        otro: num(otroVal),
-        base10: base10Val === "" ? null : num(base10Val),
-        base21: base21Val === "" ? null : num(base21Val),
-      };
-      const { data, error } = await sb.from('tickets').insert(payload).select().single();
-      if (error) throw error;
-      const [y, m, d] = dateVal.split("-");
-      const mkey = `${y}-${m}`;
-      const newTicket = { id: data.id, efectivo: payload.efectivo, tarjeta: payload.tarjeta, otro: payload.otro, base10: payload.base10, base21: payload.base21 };
-      if (mkey === key) {
-        setEntries(prev => {
-          const updated = { ...(prev || {}) };
-          updated[d] = [...(updated[d] || []), newTicket];
-          return updated;
-        });
-        showToast((entries && entries[d] ? entries[d].length + 1 : 1) > 1 ? "Ticket añadido" : "Guardado");
-      } else {
-        setCursor(new Date(Number(y), Number(m) - 1, 1));
-        showToast("Guardado");
-      }
-      resetForm();
-    } catch (err) {
-      showToast("Error al guardar: " + (err.message || "desconocido"));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function deleteTicket(day, id){
-    try {
-      const { error } = await sb.from('tickets').delete().eq('id', id);
-      if (error) throw error;
-      setEntries(prev => {
-        const updated = { ...prev };
-        const filtered = (updated[day] || []).filter(t => t.id !== id);
-        if (filtered.length) updated[day] = filtered; else delete updated[day];
-        return updated;
-      });
-    } catch (err) {
-      showToast("Error al borrar: " + (err.message || ""));
-    }
-  }
-
-  function changeMonth(delta){
-    const next = new Date(cursor.getFullYear(), cursor.getMonth() + delta, 1);
-    setCursor(next);
-  }
-
-  const sortedDays = useMemo(() => {
-    if (!entries) return [];
-    return Object.keys(entries).sort((a,b) => Number(b) - Number(a));
-  }, [entries]);
-
-  const totals = useMemo(() => {
-    if (!entries) return { total: 0, efectivo: 0, tarjeta: 0, otro: 0, base10: 0, base21: 0 };
-    return Object.values(entries).reduce((acc, tickets) => {
-      const s = sumTickets(tickets);
-      acc.efectivo += s.efectivo;
-      acc.tarjeta += s.tarjeta;
-      acc.otro += s.otro;
-      acc.base10 += s.base10;
-      acc.base21 += s.base21;
-      return acc;
-    }, { efectivo: 0, tarjeta: 0, otro: 0, base10: 0, base21: 0 });
-  }, [entries]);
-  totals.total = totals.efectivo + totals.tarjeta + totals.otro;
-
-  const numDays = sortedDays.length;
-  const avg = numDays ? totals.total / numDays : 0;
-
-  function buildExcelForMonth(mkey, monthEntries){
-    if (typeof XLSX === 'undefined') {
-      throw new Error('No se pudo cargar la librería de Excel (revisa tu conexión a internet y recarga la página).');
-    }
-    const [y, m] = mkey.split("-");
-    const days = Object.keys(monthEntries).sort((a,b) => Number(a) - Number(b));
-    if (!days.length) return false;
-    const rows = [];
-    let t_efectivo = 0, t_tarjeta = 0, t_otro = 0, t_base10 = 0, t_base21 = 0;
-    days.forEach(day => {
-      const tickets = monthEntries[day];
-      const dateObj = new Date(Number(y), Number(m)-1, Number(day));
-      tickets.forEach((t, i) => {
-        const tot = Number(t.efectivo||0) + Number(t.tarjeta||0) + Number(t.otro||0);
-        t_efectivo += Number(t.efectivo||0);
-        t_tarjeta += Number(t.tarjeta||0);
-        t_otro += Number(t.otro||0);
-        t_base10 += Number(t.base10||0);
-        t_base21 += Number(t.base21||0);
-        rows.push({
-          "Fecha": `${day}/${m}/${y}`,
-          "Día": DIAS[dateObj.getDay()],
-          "Ticket #": i + 1,
-          "Efectivo (€)": Number(t.efectivo || 0),
-          "Tarjeta (€)": Number(t.tarjeta || 0),
-          "Otros (€)": Number(t.otro || 0),
-          "Total (€)": Number(tot.toFixed(2)),
-          "Base IVA 10% (€)": t.base10 === null || t.base10 === undefined ? "" : Number(t.base10),
-          "Base IVA 21% (€)": t.base21 === null || t.base21 === undefined ? "" : Number(t.base21),
-        });
-      });
-    });
-    rows.push({
-      "Fecha": "", "Día": "", "Ticket #": "TOTAL",
-      "Efectivo (€)": Number(t_efectivo.toFixed(2)),
-      "Tarjeta (€)": Number(t_tarjeta.toFixed(2)),
-      "Otros (€)": Number(t_otro.toFixed(2)),
-      "Total (€)": Number((t_efectivo + t_tarjeta + t_otro).toFixed(2)),
-      "Base IVA 10% (€)": Number(t_base10.toFixed(2)),
-      "Base IVA 21% (€)": Number(t_base21.toFixed(2)),
-    });
-    const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{wch:12},{wch:7},{wch:9},{wch:13},{wch:13},{wch:11},{wch:12},{wch:16},{wch:16}];
-    const wb = XLSX.utils.book_new();
-    const sheetName = `${MESES[Number(m)-1].slice(0,3)} ${y}`;
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
-    const filename = `resumen_ventas_${y}-${m}.xlsx`;
-    try {
-      XLSX.writeFile(wb, filename);
-    } catch (err1) {
-      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
-    }
-    return true;
-  }
-
-  async function isExported(mkey){
-    const { data, error } = await sb.from('exported_months').select('month_key').eq('month_key', mkey).maybeSingle();
-    if (error) return false;
-    return !!data;
-  }
-  async function markExported(mkey){
-    try { await sb.from('exported_months').insert({ month_key: mkey }); } catch (e) { /* ya existía, ignorar */ }
-  }
-
-  async function exportMonth(){
-    if (!numDays) return;
-    setExporting(true);
-    try {
-      const ok = buildExcelForMonth(key, entries || {});
-      if (ok) {
-        await markExported(key);
-        showToast("Excel generado");
-        checkAccess();
-      }
-    } catch (err) {
-      showToast("Error: " + (err && err.message ? err.message : "desconocido"));
-    } finally {
-      setExporting(false);
-    }
-  }
-
-  // Al iniciar sesión: si el mes anterior tiene tickets sin exportar todavía,
-  // genera y descarga su Excel automáticamente (una sola vez por mes).
-  useEffect(() => {
-    (async () => {
-      try {
-        const today = new Date();
-        const prevDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        const prevKey = monthKey(prevDate);
-        const already = await isExported(prevKey);
-        if (already) return;
-        const grouped = await fetchMonth(prevKey);
-        if (!Object.keys(grouped).length) return;
-        const ok = buildExcelForMonth(prevKey, grouped);
-        if (ok) {
-          await markExported(prevKey);
-          const [, pm] = prevKey.split("-");
-          showToast(`Resumen de ${MESES[Number(pm)-1]} descargado automáticamente`);
-          checkAccess();
-        }
-      } catch (err) {
-        // no interrumpir el uso normal de la app si esto falla
-      }
-    })();
-  }, []);
-
-  function handleScan(e){
-    const file = e.target.files && e.target.files[0];
-    e.target.value = "";
-    if (!file) return;
-    setScanning(true);
-    setScanNote(null);
-    Tesseract.recognize(file, 'spa')
-      .then(({ data }) => {
-        const f = extractFields(data.text);
-        let filled = [];
-        if (f.efectivo !== null) { setEfectivoVal(f.efectivo.toFixed(2)); filled.push('efectivo'); }
-        if (f.tarjeta !== null) { setTarjetaVal(f.tarjeta.toFixed(2)); filled.push('tarjeta'); }
-        if (f.otro !== null) { setOtroVal(f.otro.toFixed(2)); filled.push('otros'); }
-        if (f.base10 !== null) { setBase10Val(f.base10.toFixed(2)); setShowIva(true); }
-        if (f.base21 !== null) { setBase21Val(f.base21.toFixed(2)); setShowIva(true); }
-        if (!filled.length && f.total !== null) {
-          setEfectivoVal(f.total.toFixed(2));
-          filled.push('total (revisa efectivo/tarjeta)');
-        }
-        if (filled.length) {
-          setScanNote(`Detectado: ${filled.join(', ')} — revisa antes de guardar.`);
-        } else {
-          setScanNote("No he podido leer los importes. Escríbelos a mano.");
-        }
-      })
-      .catch(() => setScanNote("Error al leer la foto. Inténtalo de nuevo."))
-      .finally(() => setScanning(false));
-  }
-
-  if (access === 'locked') {
-    return <Paywall session={session} onRecheck={checkAccess} checking={accessChecking} />;
-  }
-
-  return (
-    <div className="app-shell">
-      <div className="top-row">
-        <p className="eyebrow" style={{margin:0}}>Registro diario</p>
-        <button type="button" className="logout-link" onClick={() => sb.auth.signOut()} title="Cerrar sesión">
-          {(session.user.user_metadata && session.user.user_metadata.nombre) || session.user.email} · salir
-        </button>
-      </div>
-      <h1>Ventas del día</h1>
-
-      <div className="month-nav">
-        <button onClick={() => changeMonth(-1)} aria-label="Mes anterior">‹</button>
-        <div className="month-label">{MESES[cursor.getMonth()]} {cursor.getFullYear()}</div>
-        <button onClick={() => changeMonth(1)} aria-label="Mes siguiente">›</button>
-      </div>
-
-      <div className="summary-card">
-        <div className="summary-total-label">Total del mes</div>
-        <div className="summary-total">{loading ? "…" : fmtEUR(totals.total)}</div>
-        <div className="summary-row">
-          <span>Efectivo: <b>{loading ? "-" : fmtEUR(totals.efectivo)}</b></span>
-          <span>Tarjeta: <b>{loading ? "-" : fmtEUR(totals.tarjeta)}</b></span>
-          {totals.otro > 0 && <span>Otros: <b>{fmtEUR(totals.otro)}</b></span>}
+        <div class="feature-card">
+          <span class="icon">📊</span>
+          <h3>Excel automático</h3>
+          <p>A fin de mes se genera y descarga solo, listo para mandar a la gestoría.</p>
         </div>
-        <div className="summary-row" style={{marginTop:6}}>
-          <span>Días: <b>{loading ? "-" : numDays}</b></span>
-          <span>Media/día: <b>{loading ? "-" : fmtEUR(avg)}</b></span>
+        <div class="feature-card">
+          <span class="icon">🔒</span>
+          <h3>Datos en la nube</h3>
+          <p>Guardados de forma segura, accesibles desde cualquier dispositivo, siempre tuyos.</p>
         </div>
       </div>
+    </section>
 
-      <button type="button" className="btn-scan" onClick={() => fileInputRef.current && fileInputRef.current.click()} disabled={scanning}>
-        {scanning ? "Leyendo el ticket…" : "📷 Escanear ticket"}
-      </button>
-      <input ref={fileInputRef} type="file" accept="image/*" capture="environment"
-             style={{display:"none"}} onChange={handleScan} />
-      {scanNote && <p className="scan-note">{scanNote}</p>}
-
-      <form className="entry-form" onSubmit={saveEntry}>
-        <div className="form-row">
-          <div className="field">
-            <label htmlFor="f-date">Fecha</label>
-            <input id="f-date" type="date" value={dateVal} max={todayISO()}
-                   onChange={e => setDateVal(e.target.value)} required />
-          </div>
-        </div>
-        {(() => {
-          const [dy, dm, dd] = dateVal.split("-");
-          if (`${dy}-${dm}` !== key || !entries) return null;
-          const tickets = entries[dd] || [];
-          if (!tickets.length) return null;
-          const s = sumTickets(tickets);
-          return (
-            <p className="scan-note" style={{color:"var(--text-lo)"}}>
-              Ya llevas {tickets.length} ticket{tickets.length>1?'s':''} ese día · acumulado {fmtEUR(s.efectivo+s.tarjeta+s.otro)}
-            </p>
-          );
-        })()}
-
-        <div className="form-row">
-          <div className="field">
-            <label htmlFor="f-efectivo">Efectivo (€)</label>
-            <input id="f-efectivo" type="text" inputMode="decimal" placeholder="0,00"
-                   value={efectivoVal} onChange={e => setEfectivoVal(e.target.value)} />
-          </div>
-          <div className="field">
-            <label htmlFor="f-tarjeta">Tarjeta (€)</label>
-            <input id="f-tarjeta" type="text" inputMode="decimal" placeholder="0,00"
-                   value={tarjetaVal} onChange={e => setTarjetaVal(e.target.value)} />
-          </div>
-          <div className="field">
-            <label htmlFor="f-otro">Otros (Bizum, vales…)</label>
-            <input id="f-otro" type="text" inputMode="decimal" placeholder="0,00"
-                   value={otroVal} onChange={e => setOtroVal(e.target.value)} />
-          </div>
-        </div>
-
-        <div className="form-total">
-          <span>Total de este ticket</span>
-          <span>{fmtEUR(formTotal)}</span>
-        </div>
-
-        <button type="button" className="iva-toggle" onClick={() => setShowIva(s => !s)}>
-          {showIva ? "− Ocultar desglose IVA" : "+ Añadir desglose IVA (opcional)"}
-        </button>
-
-        {showIva && (
-          <div className="form-row">
-            <div className="field">
-              <label htmlFor="f-base10">Base IVA 10%</label>
-              <input id="f-base10" type="text" inputMode="decimal" placeholder="0,00"
-                     value={base10Val} onChange={e => setBase10Val(e.target.value)} />
-            </div>
-            <div className="field">
-              <label htmlFor="f-base21">Base IVA 21%</label>
-              <input id="f-base21" type="text" inputMode="decimal" placeholder="0,00"
-                     value={base21Val} onChange={e => setBase21Val(e.target.value)} />
-            </div>
-          </div>
-        )}
-
-        <button className="btn-save" type="submit" disabled={saving}>
-          {saving ? "..." : "+ Añadir ticket"}
-        </button>
-      </form>
-
-      <p className="section-label">Este mes · ticket a ticket</p>
-
-      {loading ? (
-        <div className="empty-state">Cargando…</div>
-      ) : sortedDays.length === 0 ? (
-        <div className="empty-state">Todavía no hay ventas registradas este mes.</div>
-      ) : (
-        sortedDays.map(day => {
-          const [y, m] = key.split("-");
-          const dateObj = new Date(Number(y), Number(m)-1, Number(day));
-          const tickets = entries[day] || [];
-          return tickets.map((t, i) => {
-            const tot = Number(t.efectivo||0) + Number(t.tarjeta||0) + Number(t.otro||0);
-            return (
-              <div className="ticket" key={t.id}>
-                <div className="ticket-top">
-                  <div>
-                    <div className="ticket-date">{day}/{m}/{y}</div>
-                    <div className="ticket-weekday">
-                      {DIAS[dateObj.getDay()]}{tickets.length > 1 ? ` · ticket ${i+1}/${tickets.length}` : ""}
-                    </div>
-                  </div>
-                  <div style={{display:"flex", alignItems:"center"}}>
-                    <div className="ticket-amount">{fmtEUR(tot)}</div>
-                    <button className="ticket-del" onClick={() => deleteTicket(day, t.id)} aria-label="Borrar">✕</button>
-                  </div>
-                </div>
-                <div className="ticket-sub">
-                  <span>Efvo {fmtEUR(t.efectivo||0)}</span>
-                  <span>Tarj {fmtEUR(t.tarjeta||0)}</span>
-                  {t.otro > 0 && <span>Otros {fmtEUR(t.otro)}</span>}
-                  {(t.base10 || t.base21) ? <span>IVA 10/21 registrado</span> : null}
-                </div>
-              </div>
-            );
-          });
-        })
-      )}
-
-      <p style={{textAlign:"center", fontSize:"10px", color:"var(--text-lo)", fontFamily:"'JetBrains Mono', monospace", margin:"18px 0 90px"}}>
-        v-cloud.1 · Supabase
-      </p>
-
-      <div className="export-bar">
-        <button className="btn-export" onClick={exportMonth} disabled={exporting || numDays === 0}>
-          {exporting ? "Generando…" : `Exportar resumen de ${MESES[cursor.getMonth()]} a Excel`}
-        </button>
+    <section class="pricing">
+      <p class="section-title">Precio</p>
+      <div class="price-card">
+        <div class="trial">PRIMER MES GRATIS</div>
+        <div class="amount">15€<span> /mes</span></div>
+        <ul class="price-list">
+          <li>Tickets ilimitados</li>
+          <li>Escáner con cámara</li>
+          <li>Exportación a Excel automática</li>
+          <li>Desglose de IVA 10% / 21%</li>
+        </ul>
+        <a class="btn-primary" href="app.html" style="width:100%; display:block;">Empezar ahora</a>
       </div>
+    </section>
 
-      {toast && <div className="toast">{toast}</div>}
-    </div>
-  );
-}
-
-// --- Root: decides Auth vs App based on session -----------------------------
-// --- Se muestra cuando el usuario llega desde un enlace de recuperación de contraseña
-function SetNewPassword({ onDone }){
-  const [password, setPassword] = useState('');
-  const [showPass, setShowPass] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
-
-  async function submit(e){
-    e.preventDefault();
-    setBusy(true); setErr(null);
-    try {
-      const { error } = await sb.auth.updateUser({ password });
-      if (error) throw error;
-      onDone();
-    } catch (e2) {
-      setErr(e2.message || 'Error');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="app-shell">
-      <p className="eyebrow">Registro diario</p>
-      <h1>Elige tu nueva contraseña</h1>
-      <form className="entry-form" onSubmit={submit}>
-        <div className="form-row">
-          <div className="field">
-            <label htmlFor="np-pass">Nueva contraseña</label>
-            <div className="pass-wrap">
-              <input id="np-pass" type={showPass ? "text" : "password"} value={password} required minLength={6}
-                     onChange={e => setPassword(e.target.value)} />
-              <button type="button" className="pass-toggle" onClick={() => setShowPass(s => !s)}>
-                {showPass ? "OCULTAR" : "MOSTRAR"}
-              </button>
-            </div>
-          </div>
-        </div>
-        {err && <p className="auth-error">{err}</p>}
-        <button className="btn-save" type="submit" disabled={busy}>
-          {busy ? "..." : "Guardar contraseña"}
-        </button>
-      </form>
-    </div>
-  );
-}
-
-function Root(){
-  const [session, setSession] = useState(undefined); // undefined = comprobando, null = sin sesión
-  const [recovery, setRecovery] = useState(false);
-
-  useEffect(() => {
-    sb.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: listener } = sb.auth.onAuthStateChange((event, sess) => {
-      if (event === 'PASSWORD_RECOVERY') setRecovery(true);
-      setSession(sess);
-    });
-    return () => { listener && listener.subscription && listener.subscription.unsubscribe(); };
-  }, []);
-
-  if (session === undefined) {
-    return <div className="app-shell"><div className="empty-state">Cargando…</div></div>;
-  }
-  if (recovery) {
-    return <SetNewPassword onDone={() => setRecovery(false)} />;
-  }
-  if (!session) return <Auth />;
-  return <App session={session} key={session.user.id} />;
-}
-
-ReactDOM.createRoot(document.getElementById('app-root')).render(<Root />);
-</script>
+    <footer>
+      © 2026 Caja · <a href="app.html" style="color:var(--text-lo);">Entrar</a>
+    </footer>
+  </div>
 </body>
 </html>
