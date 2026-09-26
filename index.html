@@ -388,6 +388,7 @@ const { useState, useEffect, useMemo, useCallback, useRef } = React;
 const SUPABASE_URL = "https://uqiafgievxxlvqwjlzlt.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxaWFmZ2lldnh4bHZxd2psemx0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNTMwMTIsImV4cCI6MjEwNTkyOTAxMn0.OYxt2zUloqD52SB3Ui285HwvwvqY9rNivII6ZpHKHuI";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/test_5kQbIU9q64ug7Asf663oA00";
 
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DIAS = ["dom","lun","mar","mié","jue","vie","sáb"];
@@ -558,6 +559,35 @@ function Auth(){
 }
 
 // --- Main app (requires an authenticated session) ---------------------------
+// --- Paywall: se muestra cuando terminó la prueba gratuita y no hay suscripción activa
+function Paywall({ session, onRecheck, checking }){
+  const payUrl = `${STRIPE_PAYMENT_LINK}?client_reference_id=${encodeURIComponent(session.user.id)}`;
+  return (
+    <div className="app-shell">
+      <div className="top-row">
+        <p className="eyebrow" style={{margin:0}}>Registro diario</p>
+        <button type="button" className="logout-link" onClick={() => sb.auth.signOut()} title="Cerrar sesión">
+          {(session.user.user_metadata && session.user.user_metadata.nombre) || session.user.email} · salir
+        </button>
+      </div>
+      <h1>Tu prueba ha terminado</h1>
+      <div className="summary-card">
+        <p style={{margin:"0 0 14px", fontSize:"14px", lineHeight:1.5}}>
+          Ya has probado la app (con tu primer mes o tu primer Excel exportado).
+          Para seguir usándola necesitas una suscripción activa.
+        </p>
+        <a href={payUrl} target="_blank" rel="noopener noreferrer" className="btn-export"
+           style={{display:"block", textAlign:"center", textDecoration:"none", position:"static", maxWidth:"none"}}>
+          Suscribirme
+        </a>
+      </div>
+      <button type="button" className="btn-scan" onClick={onRecheck} disabled={checking}>
+        {checking ? "Comprobando…" : "Ya he pagado, comprobar de nuevo"}
+      </button>
+    </div>
+  );
+}
+
 function App({ session }){
   const [cursor, setCursor] = useState(new Date());
   const [entries, setEntries] = useState(null); // {"01": [{id,efectivo,tarjeta,otro,base10,base21}, ...]}
@@ -576,7 +606,46 @@ function App({ session }){
   const [scanNote, setScanNote] = useState(null);
   const fileInputRef = useRef(null);
 
+  const [access, setAccess] = useState('checking'); // 'checking' | 'ok' | 'locked'
+  const [accessChecking, setAccessChecking] = useState(false);
+
   const key = monthKey(cursor);
+
+  const checkAccess = useCallback(async () => {
+    setAccessChecking(true);
+    try {
+      const created = new Date(session.user.created_at);
+      const secondMonthStart = new Date(created.getFullYear(), created.getMonth() + 1, 1);
+      const pastCalendarTrial = new Date() >= secondMonthStart;
+
+      const { count: exportCount } = await sb
+        .from('exported_months')
+        .select('month_key', { count: 'exact', head: true });
+      const hasExported = (exportCount || 0) > 0;
+
+      const trialOver = pastCalendarTrial || hasExported;
+
+      if (!trialOver) { setAccess('ok'); return; }
+
+      const { data: sub } = await sb
+        .from('subscriptions')
+        .select('status, current_period_end')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+
+      const isActive = sub && sub.status === 'active' &&
+        (!sub.current_period_end || new Date(sub.current_period_end) > new Date());
+
+      setAccess(isActive ? 'ok' : 'locked');
+    } catch (err) {
+      // si falla la comprobación, no bloqueamos por error técnico
+      setAccess('ok');
+    } finally {
+      setAccessChecking(false);
+    }
+  }, [session.user.id, session.user.created_at]);
+
+  useEffect(() => { checkAccess(); }, [checkAccess]);
 
   function showToast(msg){
     setToast(msg);
@@ -797,6 +866,7 @@ function App({ session }){
       if (ok) {
         await markExported(key);
         showToast("Excel generado");
+        checkAccess();
       }
     } catch (err) {
       showToast("Error: " + (err && err.message ? err.message : "desconocido"));
@@ -822,6 +892,7 @@ function App({ session }){
           await markExported(prevKey);
           const [, pm] = prevKey.split("-");
           showToast(`Resumen de ${MESES[Number(pm)-1]} descargado automáticamente`);
+          checkAccess();
         }
       } catch (err) {
         // no interrumpir el uso normal de la app si esto falla
@@ -856,6 +927,10 @@ function App({ session }){
       })
       .catch(() => setScanNote("Error al leer la foto. Inténtalo de nuevo."))
       .finally(() => setScanning(false));
+  }
+
+  if (access === 'locked') {
+    return <Paywall session={session} onRecheck={checkAccess} checking={accessChecking} />;
   }
 
   return (
