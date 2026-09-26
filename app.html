@@ -376,6 +376,45 @@
     border-radius: 14px;
   }
 
+  .gestoria-box {
+    background: var(--ink-soft);
+    border: 1px solid var(--rule);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-top: 24px;
+  }
+  .gestoria-label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-lo);
+    margin-bottom: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.05em;
+  }
+  .gestoria-box input {
+    width: 100%;
+    background: var(--ink);
+    border: 1px solid var(--rule);
+    color: var(--text-hi);
+    padding: 10px;
+    border-radius: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+  .mailto-btn {
+    display: block;
+    text-align: center;
+    background: var(--ink);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 11px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
   .export-bar {
     position: fixed;
     bottom: 0; left: 0; right: 0;
@@ -690,6 +729,8 @@ function App({ session }){
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [gestoriaEmail, setGestoriaEmail] = useState("");
+  const [gestoriaSaved, setGestoriaSaved] = useState(true);
   const fileInputRef = useRef(null);
 
   const [access, setAccess] = useState('checking'); // 'checking' | 'ok' | 'locked'
@@ -733,6 +774,24 @@ function App({ session }){
 
   useEffect(() => { checkAccess(); }, [checkAccess]);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await sb.from('settings').select('gestoria_email').eq('user_id', session.user.id).maybeSingle();
+        if (data && data.gestoria_email) setGestoriaEmail(data.gestoria_email);
+      } catch (err) { /* sin bloquear la app si esto falla */ }
+    })();
+  }, []);
+
+  async function saveGestoriaEmail(){
+    setGestoriaSaved(true);
+    try {
+      await sb.from('settings').upsert({ user_id: session.user.id, gestoria_email: gestoriaEmail.trim(), updated_at: new Date().toISOString() });
+    } catch (err) {
+      showToast("No se pudo guardar el email de la gestoría");
+    }
+  }
+
   function showToast(msg){
     setToast(msg);
     setTimeout(() => setToast(null), msg && msg.length > 40 ? 5000 : 1800);
@@ -765,6 +824,46 @@ function App({ session }){
       });
     });
     return grouped;
+  }
+
+  async function fetchRange(first, last){
+    const { data, error } = await sb
+      .from('tickets')
+      .select('*')
+      .gte('fecha', first)
+      .lte('fecha', last)
+      .order('fecha', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    const grouped = {};
+    (data || []).forEach(row => {
+      const dateStr = String(row.fecha).slice(0, 10);
+      if (!grouped[dateStr]) grouped[dateStr] = [];
+      grouped[dateStr].push({
+        id: row.id,
+        efectivo: Number(row.efectivo) || 0,
+        tarjeta: Number(row.tarjeta) || 0,
+        otro: Number(row.otro) || 0,
+        base4: row.base4 === null || row.base4 === undefined ? null : Number(row.base4),
+        base10: row.base10 === null || row.base10 === undefined ? null : Number(row.base10),
+        base21: row.base21 === null || row.base21 === undefined ? null : Number(row.base21),
+      });
+    });
+    return grouped;
+  }
+
+  function quarterKeyFromDate(d){
+    return `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`;
+  }
+  function quarterInfo(qkey){
+    const [yStr, qStr] = qkey.split("-Q");
+    const y = Number(yStr), q = Number(qStr);
+    const startMonth = (q - 1) * 3; // 0-indexed
+    const endMonth = startMonth + 2;
+    const first = `${y}-${pad(startMonth + 1)}-01`;
+    const last = `${y}-${pad(endMonth + 1)}-${pad(lastDayOfMonth(y, pad(endMonth + 1)))}`;
+    const label = `${MESES[startMonth].slice(0,3)}-${MESES[endMonth].slice(0,3)} ${y}`;
+    return { year: y, q, first, last, label };
   }
 
   useEffect(() => {
@@ -903,18 +1002,18 @@ function App({ session }){
   const numDays = sortedDays.length;
   const avg = numDays ? totals.total / numDays : 0;
 
-  function buildExcelForMonth(mkey, monthEntries){
+  function buildExcelForQuarter(qkey, rowsByDate){
     if (typeof XLSX === 'undefined') {
       throw new Error('No se pudo cargar la librería de Excel (revisa tu conexión a internet y recarga la página).');
     }
-    const [y, m] = mkey.split("-");
-    const days = Object.keys(monthEntries).sort((a,b) => Number(a) - Number(b));
-    if (!days.length) return false;
+    const dates = Object.keys(rowsByDate).sort();
+    if (!dates.length) return false;
     const rows = [];
     let t_efectivo = 0, t_tarjeta = 0, t_otro = 0, t_base4 = 0, t_base10 = 0, t_base21 = 0, t_cuota4 = 0, t_cuota10 = 0, t_cuota21 = 0;
-    days.forEach(day => {
-      const tickets = monthEntries[day];
-      const dateObj = new Date(Number(y), Number(m)-1, Number(day));
+    dates.forEach(dateStr => {
+      const tickets = rowsByDate[dateStr];
+      const [dy, dm, dd] = dateStr.split("-");
+      const dateObj = new Date(Number(dy), Number(dm)-1, Number(dd));
       tickets.forEach((t, i) => {
         const tot = Number(t.efectivo||0) + Number(t.tarjeta||0) + Number(t.otro||0);
         const cuota4 = t.base4 ? Number((Number(t.base4) * 0.04).toFixed(2)) : null;
@@ -930,7 +1029,7 @@ function App({ session }){
         t_cuota10 += cuota10 || 0;
         t_cuota21 += cuota21 || 0;
         rows.push({
-          "Fecha": `${day}/${m}/${y}`,
+          "Fecha": `${dd}/${dm}/${dy}`,
           "Día": DIAS[dateObj.getDay()],
           "Ticket #": i + 1,
           "Efectivo (€)": Number(t.efectivo || 0),
@@ -962,9 +1061,9 @@ function App({ session }){
     const ws = XLSX.utils.json_to_sheet(rows);
     ws['!cols'] = [{wch:12},{wch:7},{wch:9},{wch:13},{wch:13},{wch:11},{wch:12},{wch:15},{wch:15},{wch:16},{wch:16},{wch:16},{wch:16}];
     const wb = XLSX.utils.book_new();
-    const sheetName = `${MESES[Number(m)-1].slice(0,3)} ${y}`;
+    const sheetName = qkey.replace("-", " ");
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
-    const filename = `resumen_ventas_${y}-${m}.xlsx`;
+    const filename = `resumen_ventas_${qkey}.xlsx`;
     try {
       XLSX.writeFile(wb, filename);
     } catch (err1) {
@@ -982,24 +1081,28 @@ function App({ session }){
     return true;
   }
 
-  async function isExported(mkey){
-    const { data, error } = await sb.from('exported_months').select('month_key').eq('month_key', mkey).maybeSingle();
+  async function isExported(qkey){
+    const { data, error } = await sb.from('exported_months').select('month_key').eq('month_key', qkey).maybeSingle();
     if (error) return false;
     return !!data;
   }
-  async function markExported(mkey){
-    try { await sb.from('exported_months').insert({ month_key: mkey }); } catch (e) { /* ya existía, ignorar */ }
+  async function markExported(qkey){
+    try { await sb.from('exported_months').insert({ month_key: qkey }); } catch (e) { /* ya existía, ignorar */ }
   }
 
-  async function exportMonth(){
-    if (!numDays) return;
+  async function exportQuarter(){
     setExporting(true);
     try {
-      const ok = buildExcelForMonth(key, entries || {});
+      const qkey = quarterKeyFromDate(cursor);
+      const { first, last } = quarterInfo(qkey);
+      const rowsByDate = await fetchRange(first, last);
+      const ok = buildExcelForQuarter(qkey, rowsByDate);
       if (ok) {
-        await markExported(key);
-        showToast("Excel generado");
+        await markExported(qkey);
+        showToast("Excel del trimestre generado");
         checkAccess();
+      } else {
+        showToast("No hay tickets en ese trimestre.");
       }
     } catch (err) {
       showToast("Error: " + (err && err.message ? err.message : "desconocido"));
@@ -1008,23 +1111,26 @@ function App({ session }){
     }
   }
 
-  // Al iniciar sesión: si el mes anterior tiene tickets sin exportar todavía,
-  // genera y descarga su Excel automáticamente (una sola vez por mes).
+  // Al iniciar sesión: si el trimestre anterior tiene tickets sin exportar todavía,
+  // genera y descarga su Excel automáticamente (una sola vez por trimestre).
   useEffect(() => {
     (async () => {
       try {
         const today = new Date();
-        const prevDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        const prevKey = monthKey(prevDate);
-        const already = await isExported(prevKey);
+        const currentQ = Math.floor(today.getMonth() / 3);
+        const prevQStartMonth = currentQ === 0 ? 9 : (currentQ - 1) * 3; // si estamos en Q1, el trimestre anterior es Q4 del año pasado
+        const prevQYear = currentQ === 0 ? today.getFullYear() - 1 : today.getFullYear();
+        const prevDate = new Date(prevQYear, prevQStartMonth, 1);
+        const prevQkey = quarterKeyFromDate(prevDate);
+        const already = await isExported(prevQkey);
         if (already) return;
-        const grouped = await fetchMonth(prevKey);
-        if (!Object.keys(grouped).length) return;
-        const ok = buildExcelForMonth(prevKey, grouped);
+        const { first, last } = quarterInfo(prevQkey);
+        const rowsByDate = await fetchRange(first, last);
+        if (!Object.keys(rowsByDate).length) return;
+        const ok = buildExcelForQuarter(prevQkey, rowsByDate);
         if (ok) {
-          await markExported(prevKey);
-          const [, pm] = prevKey.split("-");
-          showToast(`Resumen de ${MESES[Number(pm)-1]} descargado automáticamente`);
+          await markExported(prevQkey);
+          showToast(`Resumen de ${prevQkey.replace("-", " ")} descargado automáticamente`);
           checkAccess();
         }
       } catch (err) {
@@ -1238,13 +1344,27 @@ function App({ session }){
         })
       )}
 
+      <div className="gestoria-box">
+        <label htmlFor="f-gestoria" className="gestoria-label">Email de tu gestoría</label>
+        <input id="f-gestoria" type="email" placeholder="gestoria@ejemplo.com"
+               value={gestoriaEmail}
+               onChange={e => { setGestoriaEmail(e.target.value); setGestoriaSaved(false); }}
+               onBlur={() => { if (!gestoriaSaved) saveGestoriaEmail(); }} />
+        {gestoriaEmail.trim() && (
+          <a className="mailto-btn"
+             href={`mailto:${gestoriaEmail.trim()}?subject=${encodeURIComponent('Resumen de ventas ' + quarterKeyFromDate(cursor).replace('-', ' '))}&body=${encodeURIComponent('Hola,\n\nAdjunto el resumen de ventas del trimestre ' + quarterInfo(quarterKeyFromDate(cursor)).label + '.\n\nUn saludo.')}`}>
+            📧 Enviar por email (adjunta el Excel descargado)
+          </a>
+        )}
+      </div>
+
       <p style={{textAlign:"center", fontSize:"10px", color:"var(--text-lo)", fontFamily:"'JetBrains Mono', monospace", margin:"18px 0 90px"}}>
         v-cloud.1 · Supabase
       </p>
 
       <div className="export-bar">
-        <button className="btn-export" onClick={exportMonth} disabled={exporting || numDays === 0}>
-          {exporting ? "Generando…" : `Exportar resumen de ${MESES[cursor.getMonth()]} a Excel`}
+        <button className="btn-export" onClick={exportQuarter} disabled={exporting}>
+          {exporting ? "Generando…" : `Exportar ${quarterKeyFromDate(cursor).replace("-", " ")} (${quarterInfo(quarterKeyFromDate(cursor)).label}) a Excel`}
         </button>
       </div>
 
