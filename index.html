@@ -516,6 +516,20 @@ function Auth(){
     }
   }
 
+  async function forgotPassword(){
+    if (!email) { setErr('Escribe tu email arriba primero.'); return; }
+    setBusy(true); setErr(null); setInfo(null);
+    try {
+      const { error } = await sb.auth.resetPasswordForEmail(email);
+      if (error) throw error;
+      setInfo('Te hemos enviado un email con un enlace para elegir una contraseña nueva.');
+    } catch (e2) {
+      setErr(e2.message || 'Error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="app-shell">
       <p className="eyebrow">Registro diario</p>
@@ -554,6 +568,12 @@ function Auth(){
               onClick={() => { setMode(m => m === 'login' ? 'signup' : 'login'); setErr(null); setInfo(null); }}>
         {mode === 'login' ? '¿No tienes cuenta todavía? Crear una' : '¿Ya tienes cuenta? Entrar'}
       </button>
+      {mode === 'login' && (
+        <button type="button" className="iva-toggle" style={{display:"block", marginTop:"4px"}}
+                onClick={forgotPassword} disabled={busy}>
+          He olvidado mi contraseña
+        </button>
+      )}
     </div>
   );
 }
@@ -1093,17 +1113,65 @@ function App({ session }){
 }
 
 // --- Root: decides Auth vs App based on session -----------------------------
+// --- Se muestra cuando el usuario llega desde un enlace de recuperación de contraseña
+function SetNewPassword({ onDone }){
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function submit(e){
+    e.preventDefault();
+    setBusy(true); setErr(null);
+    try {
+      const { error } = await sb.auth.updateUser({ password });
+      if (error) throw error;
+      onDone();
+    } catch (e2) {
+      setErr(e2.message || 'Error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="app-shell">
+      <p className="eyebrow">Registro diario</p>
+      <h1>Elige tu nueva contraseña</h1>
+      <form className="entry-form" onSubmit={submit}>
+        <div className="form-row">
+          <div className="field">
+            <label htmlFor="np-pass">Nueva contraseña</label>
+            <input id="np-pass" type="password" value={password} required minLength={6}
+                   onChange={e => setPassword(e.target.value)} />
+          </div>
+        </div>
+        {err && <p className="auth-error">{err}</p>}
+        <button className="btn-save" type="submit" disabled={busy}>
+          {busy ? "..." : "Guardar contraseña"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function Root(){
   const [session, setSession] = useState(undefined); // undefined = comprobando, null = sin sesión
+  const [recovery, setRecovery] = useState(false);
 
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: listener } = sb.auth.onAuthStateChange((_event, sess) => setSession(sess));
+    const { data: listener } = sb.auth.onAuthStateChange((event, sess) => {
+      if (event === 'PASSWORD_RECOVERY') setRecovery(true);
+      setSession(sess);
+    });
     return () => { listener && listener.subscription && listener.subscription.unsubscribe(); };
   }, []);
 
   if (session === undefined) {
     return <div className="app-shell"><div className="empty-state">Cargando…</div></div>;
+  }
+  if (recovery) {
+    return <SetNewPassword onDone={() => setRecovery(false)} />;
   }
   if (!session) return <Auth />;
   return <App session={session} key={session.user.id} />;
