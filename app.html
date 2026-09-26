@@ -243,6 +243,31 @@
     text-decoration: underline;
   }
 
+  .iva-btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .iva-btn { min-width: 70px; }
+  .iva-btn {
+    flex: 1;
+    background: var(--ink);
+    border: 1px solid var(--rule);
+    color: var(--text-lo);
+    padding: 10px 6px;
+    border-radius: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .iva-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #08130e;
+  }
+
   .btn-save {
     width: 100%;
     background: var(--accent);
@@ -429,10 +454,11 @@ function sumTickets(tickets){
     acc.efectivo += Number(t.efectivo || 0);
     acc.tarjeta += Number(t.tarjeta || 0);
     acc.otro += Number(t.otro || 0);
+    acc.base4 += Number(t.base4 || 0);
     acc.base10 += Number(t.base10 || 0);
     acc.base21 += Number(t.base21 || 0);
     return acc;
-  }, { efectivo: 0, tarjeta: 0, otro: 0, base10: 0, base21: 0 });
+  }, { efectivo: 0, tarjeta: 0, otro: 0, base4: 0, base10: 0, base21: 0 });
 }
 function lastDayOfMonth(y, m){
   return new Date(Number(y), Number(m), 0).getDate();
@@ -460,7 +486,7 @@ function leadingNumberOnLine(line){
 }
 function extractFields(text){
   const lines = text.split('\n');
-  const result = { efectivo: null, tarjeta: null, otro: null, base10: null, base21: null, total: null };
+  const result = { efectivo: null, tarjeta: null, otro: null, base4: null, base10: null, base21: null, total: null };
   const noise = /subtotal|cambio|entreg|devuel/i;
 
   function findNearbyNumber(startIdx){
@@ -484,6 +510,10 @@ function extractFields(text){
     if (result.otro === null && /(bizum|vale|cheque|transferencia)/i.test(line)) {
       const n = findNearbyNumber(idx);
       if (n !== null) result.otro = n;
+    }
+    if (result.base4 === null && /4\s?%/.test(line)) {
+      const n = leadingNumberOnLine(line);
+      if (n !== null) result.base4 = n;
     }
     if (result.base10 === null && /10\s?%/.test(line)) {
       const n = leadingNumberOnLine(line);
@@ -633,14 +663,13 @@ function Paywall({ session, onRecheck, checking }){
 
 function App({ session }){
   const [cursor, setCursor] = useState(new Date());
-  const [entries, setEntries] = useState(null); // {"01": [{id,efectivo,tarjeta,otro,base10,base21}, ...]}
+  const [entries, setEntries] = useState(null); // {"01": [{id,efectivo,tarjeta,otro,base4,base10,base21}, ...]}
   const [loading, setLoading] = useState(true);
   const [dateVal, setDateVal] = useState(todayISO());
   const [efectivoVal, setEfectivoVal] = useState("");
   const [tarjetaVal, setTarjetaVal] = useState("");
   const [otroVal, setOtroVal] = useState("");
-  const [base10Val, setBase10Val] = useState("");
-  const [base21Val, setBase21Val] = useState("");
+  const [ivaRate, setIvaRate] = useState('none'); // 'none' | '4' | '10' | '21'
   const [showIva, setShowIva] = useState(false);
   const [toast, setToast] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -716,6 +745,7 @@ function App({ session }){
         efectivo: Number(row.efectivo) || 0,
         tarjeta: Number(row.tarjeta) || 0,
         otro: Number(row.otro) || 0,
+        base4: row.base4 === null || row.base4 === undefined ? null : Number(row.base4),
         base10: row.base10 === null || row.base10 === undefined ? null : Number(row.base10),
         base21: row.base21 === null || row.base21 === undefined ? null : Number(row.base21),
       });
@@ -744,8 +774,7 @@ function App({ session }){
     setEfectivoVal("");
     setTarjetaVal("");
     setOtroVal("");
-    setBase10Val("");
-    setBase21Val("");
+    setIvaRate('none');
     setScanNote(null);
   }
 
@@ -754,19 +783,24 @@ function App({ session }){
     if (!dateVal || (efectivoVal === "" && tarjetaVal === "" && otroVal === "")) return;
     setSaving(true);
     try {
+      const totalTicket = num(efectivoVal) + num(tarjetaVal) + num(otroVal);
+      const base4 = ivaRate === '4' ? Number((totalTicket / 1.04).toFixed(2)) : null;
+      const base10 = ivaRate === '10' ? Number((totalTicket / 1.10).toFixed(2)) : null;
+      const base21 = ivaRate === '21' ? Number((totalTicket / 1.21).toFixed(2)) : null;
       const payload = {
         fecha: dateVal,
         efectivo: num(efectivoVal),
         tarjeta: num(tarjetaVal),
         otro: num(otroVal),
-        base10: base10Val === "" ? null : num(base10Val),
-        base21: base21Val === "" ? null : num(base21Val),
+        base4,
+        base10,
+        base21,
       };
       const { data, error } = await sb.from('tickets').insert(payload).select().single();
       if (error) throw error;
       const [y, m, d] = dateVal.split("-");
       const mkey = `${y}-${m}`;
-      const newTicket = { id: data.id, efectivo: payload.efectivo, tarjeta: payload.tarjeta, otro: payload.otro, base10: payload.base10, base21: payload.base21 };
+      const newTicket = { id: data.id, efectivo: payload.efectivo, tarjeta: payload.tarjeta, otro: payload.otro, base4: payload.base4, base10: payload.base10, base21: payload.base21 };
       if (mkey === key) {
         setEntries(prev => {
           const updated = { ...(prev || {}) };
@@ -812,16 +846,17 @@ function App({ session }){
   }, [entries]);
 
   const totals = useMemo(() => {
-    if (!entries) return { total: 0, efectivo: 0, tarjeta: 0, otro: 0, base10: 0, base21: 0 };
+    if (!entries) return { total: 0, efectivo: 0, tarjeta: 0, otro: 0, base4: 0, base10: 0, base21: 0 };
     return Object.values(entries).reduce((acc, tickets) => {
       const s = sumTickets(tickets);
       acc.efectivo += s.efectivo;
       acc.tarjeta += s.tarjeta;
       acc.otro += s.otro;
+      acc.base4 += s.base4;
       acc.base10 += s.base10;
       acc.base21 += s.base21;
       return acc;
-    }, { efectivo: 0, tarjeta: 0, otro: 0, base10: 0, base21: 0 });
+    }, { efectivo: 0, tarjeta: 0, otro: 0, base4: 0, base10: 0, base21: 0 });
   }, [entries]);
   totals.total = totals.efectivo + totals.tarjeta + totals.otro;
 
@@ -836,17 +871,24 @@ function App({ session }){
     const days = Object.keys(monthEntries).sort((a,b) => Number(a) - Number(b));
     if (!days.length) return false;
     const rows = [];
-    let t_efectivo = 0, t_tarjeta = 0, t_otro = 0, t_base10 = 0, t_base21 = 0;
+    let t_efectivo = 0, t_tarjeta = 0, t_otro = 0, t_base4 = 0, t_base10 = 0, t_base21 = 0, t_cuota4 = 0, t_cuota10 = 0, t_cuota21 = 0;
     days.forEach(day => {
       const tickets = monthEntries[day];
       const dateObj = new Date(Number(y), Number(m)-1, Number(day));
       tickets.forEach((t, i) => {
         const tot = Number(t.efectivo||0) + Number(t.tarjeta||0) + Number(t.otro||0);
+        const cuota4 = t.base4 ? Number((Number(t.base4) * 0.04).toFixed(2)) : null;
+        const cuota10 = t.base10 ? Number((Number(t.base10) * 0.10).toFixed(2)) : null;
+        const cuota21 = t.base21 ? Number((Number(t.base21) * 0.21).toFixed(2)) : null;
         t_efectivo += Number(t.efectivo||0);
         t_tarjeta += Number(t.tarjeta||0);
         t_otro += Number(t.otro||0);
+        t_base4 += Number(t.base4||0);
         t_base10 += Number(t.base10||0);
         t_base21 += Number(t.base21||0);
+        t_cuota4 += cuota4 || 0;
+        t_cuota10 += cuota10 || 0;
+        t_cuota21 += cuota21 || 0;
         rows.push({
           "Fecha": `${day}/${m}/${y}`,
           "Día": DIAS[dateObj.getDay()],
@@ -855,8 +897,12 @@ function App({ session }){
           "Tarjeta (€)": Number(t.tarjeta || 0),
           "Otros (€)": Number(t.otro || 0),
           "Total (€)": Number(tot.toFixed(2)),
+          "Base IVA 4% (€)": t.base4 === null || t.base4 === undefined ? "" : Number(t.base4),
+          "Cuota IVA 4% (€)": cuota4 === null ? "" : cuota4,
           "Base IVA 10% (€)": t.base10 === null || t.base10 === undefined ? "" : Number(t.base10),
+          "Cuota IVA 10% (€)": cuota10 === null ? "" : cuota10,
           "Base IVA 21% (€)": t.base21 === null || t.base21 === undefined ? "" : Number(t.base21),
+          "Cuota IVA 21% (€)": cuota21 === null ? "" : cuota21,
         });
       });
     });
@@ -866,11 +912,15 @@ function App({ session }){
       "Tarjeta (€)": Number(t_tarjeta.toFixed(2)),
       "Otros (€)": Number(t_otro.toFixed(2)),
       "Total (€)": Number((t_efectivo + t_tarjeta + t_otro).toFixed(2)),
+      "Base IVA 4% (€)": Number(t_base4.toFixed(2)),
+      "Cuota IVA 4% (€)": Number(t_cuota4.toFixed(2)),
       "Base IVA 10% (€)": Number(t_base10.toFixed(2)),
+      "Cuota IVA 10% (€)": Number(t_cuota10.toFixed(2)),
       "Base IVA 21% (€)": Number(t_base21.toFixed(2)),
+      "Cuota IVA 21% (€)": Number(t_cuota21.toFixed(2)),
     });
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{wch:12},{wch:7},{wch:9},{wch:13},{wch:13},{wch:11},{wch:12},{wch:16},{wch:16}];
+    ws['!cols'] = [{wch:12},{wch:7},{wch:9},{wch:13},{wch:13},{wch:11},{wch:12},{wch:15},{wch:15},{wch:16},{wch:16},{wch:16},{wch:16}];
     const wb = XLSX.utils.book_new();
     const sheetName = `${MESES[Number(m)-1].slice(0,3)} ${y}`;
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
@@ -956,8 +1006,12 @@ function App({ session }){
         if (f.efectivo !== null) { setEfectivoVal(f.efectivo.toFixed(2)); filled.push('efectivo'); }
         if (f.tarjeta !== null) { setTarjetaVal(f.tarjeta.toFixed(2)); filled.push('tarjeta'); }
         if (f.otro !== null) { setOtroVal(f.otro.toFixed(2)); filled.push('otros'); }
-        if (f.base10 !== null) { setBase10Val(f.base10.toFixed(2)); setShowIva(true); }
-        if (f.base21 !== null) { setBase21Val(f.base21.toFixed(2)); setShowIva(true); }
+        const detected = [f.base4 !== null, f.base10 !== null, f.base21 !== null].filter(Boolean).length;
+        if (detected === 1) {
+          if (f.base4 !== null) { setIvaRate('4'); setShowIva(true); }
+          else if (f.base10 !== null) { setIvaRate('10'); setShowIva(true); }
+          else if (f.base21 !== null) { setIvaRate('21'); setShowIva(true); }
+        }
         if (!filled.length && f.total !== null) {
           setEfectivoVal(f.total.toFixed(2));
           filled.push('total (revisa efectivo/tarjeta)');
@@ -1058,22 +1112,37 @@ function App({ session }){
         </div>
 
         <button type="button" className="iva-toggle" onClick={() => setShowIva(s => !s)}>
-          {showIva ? "− Ocultar desglose IVA" : "+ Añadir desglose IVA (opcional)"}
+          {showIva ? "− Ocultar IVA" : "+ Indicar tipo de IVA (opcional)"}
         </button>
 
         {showIva && (
-          <div className="form-row">
-            <div className="field">
-              <label htmlFor="f-base10">Base IVA 10%</label>
-              <input id="f-base10" type="text" inputMode="decimal" placeholder="0,00"
-                     value={base10Val} onChange={e => setBase10Val(e.target.value)} />
-            </div>
-            <div className="field">
-              <label htmlFor="f-base21">Base IVA 21%</label>
-              <input id="f-base21" type="text" inputMode="decimal" placeholder="0,00"
-                     value={base21Val} onChange={e => setBase21Val(e.target.value)} />
-            </div>
+          <div className="iva-btn-row">
+            <button type="button"
+                    className={"iva-btn" + (ivaRate === 'none' ? " active" : "")}
+                    onClick={() => setIvaRate('none')}>
+              Sin IVA
+            </button>
+            <button type="button"
+                    className={"iva-btn" + (ivaRate === '4' ? " active" : "")}
+                    onClick={() => setIvaRate('4')}>
+              IVA 4%
+            </button>
+            <button type="button"
+                    className={"iva-btn" + (ivaRate === '10' ? " active" : "")}
+                    onClick={() => setIvaRate('10')}>
+              IVA 10%
+            </button>
+            <button type="button"
+                    className={"iva-btn" + (ivaRate === '21' ? " active" : "")}
+                    onClick={() => setIvaRate('21')}>
+              IVA 21%
+            </button>
           </div>
+        )}
+        {showIva && ivaRate !== 'none' && formTotal > 0 && (
+          <p className="scan-note" style={{marginTop:"-4px"}}>
+            Base sin IVA: {fmtEUR(formTotal / (ivaRate === '4' ? 1.04 : ivaRate === '10' ? 1.10 : 1.21))} (calculada del total del ticket)
+          </p>
         )}
 
         <button className="btn-save" type="submit" disabled={saving}>
@@ -1112,7 +1181,9 @@ function App({ session }){
                   <span>Efvo {fmtEUR(t.efectivo||0)}</span>
                   <span>Tarj {fmtEUR(t.tarjeta||0)}</span>
                   {t.otro > 0 && <span>Otros {fmtEUR(t.otro)}</span>}
-                  {(t.base10 || t.base21) ? <span>IVA 10/21 registrado</span> : null}
+                  {t.base4 ? <span>IVA 4%</span> : null}
+                  {t.base10 ? <span>IVA 10%</span> : null}
+                  {t.base21 ? <span>IVA 21%</span> : null}
                 </div>
               </div>
             );
