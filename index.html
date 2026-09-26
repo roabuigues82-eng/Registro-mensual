@@ -486,6 +486,7 @@ function extractFields(text){
 // --- Auth screen -----------------------------------------------------------
 function Auth(){
   const [mode, setMode] = useState('login');
+  const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -500,7 +501,10 @@ function Auth(){
         const { error } = await sb.auth.signInWithPassword({ email, password });
         if (error) throw error;
       } else {
-        const { error } = await sb.auth.signUp({ email, password });
+        const { error } = await sb.auth.signUp({
+          email, password,
+          options: { data: { nombre: nombre.trim() } }
+        });
         if (error) throw error;
         setInfo('Cuenta creada. Si tu proyecto pide confirmación de email, revisa tu correo antes de entrar.');
       }
@@ -516,9 +520,18 @@ function Auth(){
       <p className="eyebrow">Registro diario</p>
       <h1>Ventas del día</h1>
       <form className="entry-form" onSubmit={submit}>
+        {mode === 'signup' && (
+          <div className="form-row">
+            <div className="field">
+              <label htmlFor="a-nombre">Nombre del negocio</label>
+              <input id="a-nombre" type="text" value={nombre} required
+                     onChange={e => setNombre(e.target.value)} />
+            </div>
+          </div>
+        )}
         <div className="form-row">
           <div className="field">
-            <label htmlFor="a-email">Email del restaurante</label>
+            <label htmlFor="a-email">Email del negocio</label>
             <input id="a-email" type="email" value={email} required
                    onChange={e => setEmail(e.target.value)} />
           </div>
@@ -850,7 +863,7 @@ function App({ session }){
       <div className="top-row">
         <p className="eyebrow" style={{margin:0}}>Registro diario</p>
         <button type="button" className="logout-link" onClick={() => sb.auth.signOut()} title="Cerrar sesión">
-          {session.user.email} · salir
+          {(session.user.user_metadata && session.user.user_metadata.nombre) || session.user.email} · salir
         </button>
       </div>
       <h1>Ventas del día</h1>
