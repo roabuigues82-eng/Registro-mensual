@@ -797,6 +797,11 @@ function App({ session }){
     setTimeout(() => setToast(null), msg && msg.length > 40 ? 5000 : 1800);
   }
 
+  function activeRowsOnly(data){
+    const voidedIds = new Set((data || []).filter(r => r.record_type === 'anulacion' && r.refs_id).map(r => r.refs_id));
+    return (data || []).filter(r => r.record_type === 'alta' && !voidedIds.has(r.id));
+  }
+
   async function fetchMonth(mkey){
     const [y, m] = mkey.split("-");
     const first = `${y}-${m}-01`;
@@ -810,11 +815,12 @@ function App({ session }){
       .order('created_at', { ascending: true });
     if (error) throw error;
     const grouped = {};
-    (data || []).forEach(row => {
+    activeRowsOnly(data).forEach(row => {
       const day = String(row.fecha).slice(8, 10);
       if (!grouped[day]) grouped[day] = [];
       grouped[day].push({
         id: row.id,
+        seq: row.seq_num,
         efectivo: Number(row.efectivo) || 0,
         tarjeta: Number(row.tarjeta) || 0,
         otro: Number(row.otro) || 0,
@@ -836,11 +842,12 @@ function App({ session }){
       .order('created_at', { ascending: true });
     if (error) throw error;
     const grouped = {};
-    (data || []).forEach(row => {
+    activeRowsOnly(data).forEach(row => {
       const dateStr = String(row.fecha).slice(0, 10);
       if (!grouped[dateStr]) grouped[dateStr] = [];
       grouped[dateStr].push({
         id: row.id,
+        seq: row.seq_num,
         efectivo: Number(row.efectivo) || 0,
         tarjeta: Number(row.tarjeta) || 0,
         otro: Number(row.otro) || 0,
@@ -927,17 +934,23 @@ function App({ session }){
       };
 
       if (editingId) {
-        const { error } = await sb.from('tickets').update(payload).eq('id', editingId);
-        if (error) throw error;
+        // No se modifica el registro original: se anula (registro enlazado) y se crea uno nuevo correcto
+        const { error: voidErr } = await sb.from('tickets').insert({
+          fecha: dateVal, efectivo: 0, tarjeta: 0, otro: 0, base4: null, base10: null, base21: null,
+          record_type: 'anulacion', refs_id: editingId,
+        });
+        if (voidErr) throw voidErr;
+        const { error: newErr } = await sb.from('tickets').insert({ ...payload, record_type: 'alta' });
+        if (newErr) throw newErr;
         const grouped = await fetchMonth(key);
         setEntries(grouped);
         showToast("Cambios guardados");
       } else {
-        const { data, error } = await sb.from('tickets').insert(payload).select().single();
+        const { data, error } = await sb.from('tickets').insert({ ...payload, record_type: 'alta' }).select().single();
         if (error) throw error;
         const [y, m, d] = dateVal.split("-");
         const mkey = `${y}-${m}`;
-        const newTicket = { id: data.id, efectivo: payload.efectivo, tarjeta: payload.tarjeta, otro: payload.otro, base4: payload.base4, base10: payload.base10, base21: payload.base21 };
+        const newTicket = { id: data.id, seq: data.seq_num, efectivo: payload.efectivo, tarjeta: payload.tarjeta, otro: payload.otro, base4: payload.base4, base10: payload.base10, base21: payload.base21 };
         if (mkey === key) {
           setEntries(prev => {
             const updated = { ...(prev || {}) };
@@ -959,8 +972,12 @@ function App({ session }){
   }
 
   async function deleteTicket(day, id){
+    if (!window.confirm("¿Anular este ticket? No se borra: queda registrado como anulado, con historial completo, tal como exige la ley.")) return;
     try {
-      const { error } = await sb.from('tickets').delete().eq('id', id);
+      const { error } = await sb.from('tickets').insert({
+        fecha: `${key}-${day}`, efectivo: 0, tarjeta: 0, otro: 0, base4: null, base10: null, base21: null,
+        record_type: 'anulacion', refs_id: id,
+      });
       if (error) throw error;
       setEntries(prev => {
         const updated = { ...prev };
@@ -970,7 +987,7 @@ function App({ session }){
       });
       if (editingId === id) resetForm();
     } catch (err) {
-      showToast("Error al borrar: " + (err.message || ""));
+      showToast("Error al anular: " + (err.message || ""));
     }
   }
 
@@ -1029,6 +1046,7 @@ function App({ session }){
         t_cuota10 += cuota10 || 0;
         t_cuota21 += cuota21 || 0;
         rows.push({
+          "Nº registro": t.seq,
           "Fecha": `${dd}/${dm}/${dy}`,
           "Día": DIAS[dateObj.getDay()],
           "Ticket #": i + 1,
@@ -1046,7 +1064,7 @@ function App({ session }){
       });
     });
     rows.push({
-      "Fecha": "", "Día": "", "Ticket #": "TOTAL",
+      "Nº registro": "", "Fecha": "", "Día": "", "Ticket #": "TOTAL",
       "Efectivo (€)": Number(t_efectivo.toFixed(2)),
       "Tarjeta (€)": Number(t_tarjeta.toFixed(2)),
       "Otros (€)": Number(t_otro.toFixed(2)),
@@ -1059,7 +1077,7 @@ function App({ session }){
       "Cuota IVA 21% (€)": Number(t_cuota21.toFixed(2)),
     });
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{wch:12},{wch:7},{wch:9},{wch:13},{wch:13},{wch:11},{wch:12},{wch:15},{wch:15},{wch:16},{wch:16},{wch:16},{wch:16}];
+    ws['!cols'] = [{wch:11},{wch:12},{wch:7},{wch:9},{wch:13},{wch:13},{wch:11},{wch:12},{wch:15},{wch:15},{wch:16},{wch:16},{wch:16},{wch:16}];
     const wb = XLSX.utils.book_new();
     const sheetName = qkey.replace("-", " ");
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
@@ -1319,7 +1337,7 @@ function App({ session }){
               <div className={"ticket" + (editingId === t.id ? " editing" : "")} key={t.id}>
                 <div className="ticket-top">
                   <div>
-                    <div className="ticket-date">{day}/{m}/{y}</div>
+                    <div className="ticket-date">{day}/{m}/{y} <span style={{color:"var(--text-lo)", fontWeight:400}}>#{t.seq}</span></div>
                     <div className="ticket-weekday">
                       {DIAS[dateObj.getDay()]}{tickets.length > 1 ? ` · ticket ${i+1}/${tickets.length}` : ""}
                     </div>
@@ -1327,7 +1345,7 @@ function App({ session }){
                   <div style={{display:"flex", alignItems:"center"}}>
                     <div className="ticket-amount">{fmtEUR(tot)}</div>
                     <button className="ticket-edit" onClick={() => startEdit(day, t)} aria-label="Editar">✎</button>
-                    <button className="ticket-del" onClick={() => deleteTicket(day, t.id)} aria-label="Borrar">✕</button>
+                    <button className="ticket-del" onClick={() => deleteTicket(day, t.id)} aria-label="Anular">✕</button>
                   </div>
                 </div>
                 <div className="ticket-sub">
@@ -1359,7 +1377,7 @@ function App({ session }){
       </div>
 
       <p style={{textAlign:"center", fontSize:"10px", color:"var(--text-lo)", fontFamily:"'JetBrains Mono', monospace", margin:"18px 0 90px"}}>
-        v-cloud.1 · Supabase
+        v-cloud.2 · Supabase · registro inalterable
       </p>
 
       <div className="export-bar">
