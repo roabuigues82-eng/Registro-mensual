@@ -1141,7 +1141,7 @@ function App({ session }){
         return;
       }
       const base64 = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
-      const { data, error } = await sb.functions.invoke('send-quarterly-email', {
+      const { data, error } = await sb.functions.invoke('clever-responder', {
         body: {
           to: gestoriaEmail.trim(),
           subject: `Resumen de ventas ${qkey.replace('-', ' ')}`,
@@ -1480,7 +1480,7 @@ function preprocessForOCR(file){
       </div>
 
       <p style={{textAlign:"center", fontSize:"10px", color:"var(--text-lo)", fontFamily:"'JetBrains Mono', monospace", margin:"18px 0 90px"}}>
-        v-cloud.10
+        v-cloud.11
       </p>
 
       <div className="export-bar">
