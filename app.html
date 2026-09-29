@@ -1163,10 +1163,16 @@ function preprocessForOCR(file){
     const url = URL.createObjectURL(file);
     img.onload = () => {
       try {
-        const scale = 2; // amplía tickets de baja resolución / letra pequeña
+        // Ajusta al tamaño ideal para OCR sin pasarse: agranda fotos pequeñas,
+        // pero SIEMPRE limita el lado largo a un máximo seguro para el navegador móvil
+        // (fotos de cámara a tamaño completo pueden hacer fallar el canvas si se agrandan más).
+        const longSide = Math.max(img.width, img.height);
+        const maxDim = 1800;
+        let scale = maxDim / longSide;
+        if (scale > 2) scale = 2; // no hace falta agrandar más de x2 aunque la foto sea diminuta
         const canvas = document.createElement('canvas');
-        canvas.width = img.width * scale;
-        canvas.height = img.height * scale;
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
@@ -1426,7 +1432,7 @@ function preprocessForOCR(file){
       </div>
 
       <p style={{textAlign:"center", fontSize:"10px", color:"var(--text-lo)", fontFamily:"'JetBrains Mono', monospace", margin:"18px 0 90px"}}>
-        v-cloud.3 · OCR mejorado
+        v-cloud.4 · OCR mejorado
       </p>
 
       <div className="export-bar">
