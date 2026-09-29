@@ -477,7 +477,8 @@ const { useState, useEffect, useMemo, useCallback, useRef } = React;
 const SUPABASE_URL = "https://uqiafgievxxlvqwjlzlt.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxaWFmZ2lldnh4bHZxd2psemx0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNTMwMTIsImV4cCI6MjEwNTkyOTAxMn0.OYxt2zUloqD52SB3Ui285HwvwvqY9rNivII6ZpHKHuI";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/test_5kQbIU9q64ug7Asf663oA00";
+const STRIPE_LINK_MONTHLY = "https://buy.stripe.com/test_00wcMYeKqe4Qf2U0bc3oA01";
+const STRIPE_LINK_YEARLY = "https://buy.stripe.com/test_4gM7sEgSy1i46wobTU3oA02";
 
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DIAS = ["dom","lun","mar","mié","jue","vie","sáb"];
@@ -681,7 +682,8 @@ function Auth(){
 // --- Main app (requires an authenticated session) ---------------------------
 // --- Paywall: se muestra cuando terminó la prueba gratuita y no hay suscripción activa
 function Paywall({ session, onRecheck, checking }){
-  const payUrl = `${STRIPE_PAYMENT_LINK}?client_reference_id=${encodeURIComponent(session.user.id)}`;
+  const monthlyUrl = `${STRIPE_LINK_MONTHLY}?client_reference_id=${encodeURIComponent(session.user.id)}`;
+  const yearlyUrl = `${STRIPE_LINK_YEARLY}?client_reference_id=${encodeURIComponent(session.user.id)}`;
   return (
     <div className="app-shell">
       <div className="top-row">
@@ -691,16 +693,31 @@ function Paywall({ session, onRecheck, checking }){
         </button>
       </div>
       <h1>Tu prueba ha terminado</h1>
-      <div className="summary-card">
-        <p style={{margin:"0 0 14px", fontSize:"14px", lineHeight:1.5}}>
-          Ya has probado la app (con tu primer mes o tu primer Excel exportado).
-          Para seguir usándola necesitas una suscripción activa.
-        </p>
-        <a href={payUrl} target="_blank" rel="noopener noreferrer" className="btn-export"
-           style={{display:"block", textAlign:"center", textDecoration:"none", position:"static", maxWidth:"none"}}>
-          Suscribirme
+      <p style={{margin:"0 0 16px", fontSize:"14px", lineHeight:1.5, color:"var(--text-lo)"}}>
+        Tu mes de prueba gratuita ha terminado.
+        Elige un plan para seguir usándola:
+      </p>
+
+      <div className="summary-card" style={{marginBottom:"14px"}}>
+        <div className="summary-total-label">Plan mensual</div>
+        <div className="summary-total" style={{fontSize:"28px"}}>14,90€<span style={{fontSize:"14px", color:"var(--text-lo)"}}> /mes</span></div>
+        <a href={monthlyUrl} target="_blank" rel="noopener noreferrer" className="btn-export"
+           style={{display:"block", textAlign:"center", textDecoration:"none", position:"static", maxWidth:"none", marginTop:"10px"}}>
+          Suscribirme al mes
         </a>
       </div>
+
+      <div className="summary-card" style={{marginBottom:"14px"}}>
+        <div style={{display:"inline-block", background:"var(--accent)", color:"#08130e", fontSize:"11px", fontWeight:800, padding:"4px 10px", borderRadius:"100px", marginBottom:"6px", fontFamily:"'JetBrains Mono', monospace", letterSpacing:"0.04em"}}>AHORRA MÁS</div>
+        <div className="summary-total-label">Plan anual</div>
+        <div className="summary-total" style={{fontSize:"28px"}}>9,50€<span style={{fontSize:"14px", color:"var(--text-lo)"}}> /mes</span></div>
+        <p style={{margin:"2px 0 0", fontSize:"12px", color:"var(--text-lo)"}}>114€ facturados una vez al año</p>
+        <a href={yearlyUrl} target="_blank" rel="noopener noreferrer" className="btn-export"
+           style={{display:"block", textAlign:"center", textDecoration:"none", position:"static", maxWidth:"none", marginTop:"10px"}}>
+          Suscribirme al año
+        </a>
+      </div>
+
       <button type="button" className="btn-scan" onClick={onRecheck} disabled={checking}>
         {checking ? "Comprobando…" : "Ya he pagado, comprobar de nuevo"}
       </button>
@@ -736,15 +753,9 @@ function App({ session }){
     setAccessChecking(true);
     try {
       const created = new Date(session.user.created_at);
-      const secondMonthStart = new Date(created.getFullYear(), created.getMonth() + 1, 1);
-      const pastCalendarTrial = new Date() >= secondMonthStart;
-
-      const { count: exportCount } = await sb
-        .from('exported_months')
-        .select('month_key', { count: 'exact', head: true });
-      const hasExported = (exportCount || 0) > 0;
-
-      const trialOver = pastCalendarTrial || hasExported;
+      const trialEnd = new Date(created);
+      trialEnd.setMonth(trialEnd.getMonth() + 1); // un mes real desde el registro, exportes o no
+      const trialOver = new Date() >= trialEnd;
 
       if (!trialOver) { setAccess('ok'); return; }
 
@@ -1388,7 +1399,7 @@ function preprocessForOCR(file){
       </div>
 
       <p style={{textAlign:"center", fontSize:"10px", color:"var(--text-lo)", fontFamily:"'JetBrains Mono', monospace", margin:"18px 0 90px"}}>
-        v-cloud.6
+        v-cloud.8
       </p>
 
       <div className="export-bar">
