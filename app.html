@@ -407,7 +407,23 @@
     border-radius: 10px;
     font-size: 13px;
     font-weight: 700;
+    font-family: inherit;
     text-decoration: none;
+    cursor: pointer;
+  }
+  .mailto-btn:disabled { opacity: 0.5; cursor: default; }
+  .whatsapp-btn {
+    display: block;
+    text-align: center;
+    background: var(--ink);
+    border: 1px solid #25D366;
+    color: #25D366;
+    padding: 11px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    margin-top: 8px;
   }
 
   .export-bar {
@@ -738,9 +754,11 @@ function App({ session }){
   const [toast, setToast] = useState(null);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState(null);
   const [gestoriaEmail, setGestoriaEmail] = useState("");
+  const [gestoriaPhone, setGestoriaPhone] = useState("");
   const [gestoriaSaved, setGestoriaSaved] = useState(true);
   const fileInputRef = useRef(null);
 
@@ -782,8 +800,9 @@ function App({ session }){
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await sb.from('settings').select('gestoria_email').eq('user_id', session.user.id).maybeSingle();
+        const { data } = await sb.from('settings').select('gestoria_email, gestoria_phone').eq('user_id', session.user.id).maybeSingle();
         if (data && data.gestoria_email) setGestoriaEmail(data.gestoria_email);
+        if (data && data.gestoria_phone) setGestoriaPhone(data.gestoria_phone);
       } catch (err) { /* sin bloquear la app si esto falla */ }
     })();
   }, []);
@@ -791,7 +810,7 @@ function App({ session }){
   async function saveGestoriaEmail(){
     setGestoriaSaved(true);
     try {
-      await sb.from('settings').upsert({ user_id: session.user.id, gestoria_email: gestoriaEmail.trim(), updated_at: new Date().toISOString() });
+      await sb.from('settings').upsert({ user_id: session.user.id, gestoria_email: gestoriaEmail.trim(), gestoria_phone: gestoriaPhone.trim(), updated_at: new Date().toISOString() });
     } catch (err) {
       showToast("No se pudo guardar el email de la gestoría");
     }
@@ -993,12 +1012,12 @@ function App({ session }){
   const numDays = sortedDays.length;
   const avg = numDays ? totals.total / numDays : 0;
 
-  function buildExcelForQuarter(qkey, rowsByDate){
+  function buildQuarterWorkbook(qkey, rowsByDate){
     if (typeof XLSX === 'undefined') {
       throw new Error('No se pudo cargar la librería de Excel (revisa tu conexión a internet y recarga la página).');
     }
     const dates = Object.keys(rowsByDate).sort();
-    if (!dates.length) return false;
+    if (!dates.length) return null;
     const rows = [];
     let t_efectivo = 0, t_tarjeta = 0, t_otro = 0, t_base4 = 0, t_base10 = 0, t_base21 = 0, t_cuota4 = 0, t_cuota10 = 0, t_cuota21 = 0;
     dates.forEach(dateStr => {
@@ -1055,6 +1074,12 @@ function App({ session }){
     const wb = XLSX.utils.book_new();
     const sheetName = qkey.replace("-", " ");
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    return wb;
+  }
+
+  function buildExcelForQuarter(qkey, rowsByDate){
+    const wb = buildQuarterWorkbook(qkey, rowsByDate);
+    if (!wb) return false;
     const filename = `resumen_ventas_${qkey}.xlsx`;
     try {
       XLSX.writeFile(wb, filename);
@@ -1100,6 +1125,40 @@ function App({ session }){
       showToast("Error: " + (err && err.message ? err.message : "desconocido"));
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function sendQuarterByEmail(){
+    if (!gestoriaEmail.trim()) return;
+    setSendingEmail(true);
+    try {
+      const qkey = quarterKeyFromDate(cursor);
+      const { first, last, label } = quarterInfo(qkey);
+      const rowsByDate = await fetchRange(first, last);
+      const wb = buildQuarterWorkbook(qkey, rowsByDate);
+      if (!wb) {
+        showToast("No hay tickets en ese trimestre.");
+        return;
+      }
+      const base64 = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+      const { data, error } = await sb.functions.invoke('send-quarterly-email', {
+        body: {
+          to: gestoriaEmail.trim(),
+          subject: `Resumen de ventas ${qkey.replace('-', ' ')}`,
+          text: `Hola,\n\nAdjunto el resumen de ventas del trimestre ${label}.\n\nUn saludo.`,
+          filename: `resumen_ventas_${qkey}.xlsx`,
+          contentBase64: base64,
+        },
+      });
+      if (error) throw error;
+      if (data && data.error) throw new Error(typeof data.error === 'string' ? data.error : JSON.stringify(data.error));
+      await markExported(qkey);
+      showToast("Email enviado a tu gestoría");
+      checkAccess();
+    } catch (err) {
+      showToast("Error al enviar: " + (err && err.message ? err.message : "desconocido"));
+    } finally {
+      setSendingEmail(false);
     }
   }
 
@@ -1391,15 +1450,37 @@ function preprocessForOCR(file){
                onChange={e => { setGestoriaEmail(e.target.value); setGestoriaSaved(false); }}
                onBlur={() => { if (!gestoriaSaved) saveGestoriaEmail(); }} />
         {gestoriaEmail.trim() && (
-          <a className="mailto-btn"
+          <button type="button" className="mailto-btn" style={{width:"100%", cursor:"pointer", marginBottom:"8px"}}
+                  onClick={sendQuarterByEmail} disabled={sendingEmail}>
+            {sendingEmail ? "Enviando…" : "🚀 Enviar ahora (automático, con Excel adjunto)"}
+          </button>
+        )}
+        {gestoriaEmail.trim() && (
+          <a className="mailto-btn" style={{opacity:0.75}}
              href={`mailto:${gestoriaEmail.trim()}?subject=${encodeURIComponent('Resumen de ventas ' + quarterKeyFromDate(cursor).replace('-', ' '))}&body=${encodeURIComponent('Hola,\n\nAdjunto el resumen de ventas del trimestre ' + quarterInfo(quarterKeyFromDate(cursor)).label + '.\n\nUn saludo.')}`}>
-            📧 Enviar por email (adjunta el Excel descargado)
+            📧 O ábrelo tú en tu correo (adjuntas tú)
           </a>
         )}
+
+        <label htmlFor="f-gestoria-tel" className="gestoria-label" style={{marginTop:"12px"}}>WhatsApp de tu gestoría</label>
+        <input id="f-gestoria-tel" type="tel" placeholder="+34 600 000 000"
+               value={gestoriaPhone}
+               onChange={e => { setGestoriaPhone(e.target.value); setGestoriaSaved(false); }}
+               onBlur={() => { if (!gestoriaSaved) saveGestoriaEmail(); }} />
+        {gestoriaPhone.trim() && (
+          <a className="whatsapp-btn"
+             href={`https://wa.me/${gestoriaPhone.replace(/[^\d]/g, '')}?text=${encodeURIComponent('Hola, te mando el resumen de ventas del trimestre ' + quarterInfo(quarterKeyFromDate(cursor)).label + '. Lo adjunto ahora mismo.')}`}
+             target="_blank" rel="noopener noreferrer">
+            📱 Enviar por WhatsApp
+          </a>
+        )}
+        <p style={{fontSize:"11px", color:"var(--text-lo)", margin:"8px 0 0"}}>
+          El botón de arriba manda el email con el Excel adjunto automáticamente. El de WhatsApp abre el chat con el mensaje listo, pero el archivo lo adjuntas tú desde tus descargas.
+        </p>
       </div>
 
       <p style={{textAlign:"center", fontSize:"10px", color:"var(--text-lo)", fontFamily:"'JetBrains Mono', monospace", margin:"18px 0 90px"}}>
-        v-cloud.8
+        v-cloud.10
       </p>
 
       <div className="export-bar">
