@@ -1233,15 +1233,15 @@ function preprocessForOCR(file){
         }
         if (!filled.length && f.total !== null) {
           setEfectivoVal(f.total.toFixed(2));
-          filled.push('total (revisa efectivo/tarjeta)');
+          filled.push('total (ajusta efectivo/tarjeta si hace falta)');
         }
         if (filled.length) {
-          setScanNote(`Detectado: ${filled.join(', ')} — revisa antes de guardar.`);
+          setScanNote(`Borrador: ${filled.join(', ')} — toca los campos para ajustar.`);
         } else {
-          setScanNote("No he podido leer los importes. Escríbelos a mano.");
+          setScanNote("Esta vez no he pillado los números — escríbelos tú, tarda igual de poco.");
         }
       })
-      .catch(() => setScanNote("Error al leer la foto. Inténtalo de nuevo."))
+      .catch(() => setScanNote("No he podido procesar la foto — inténtalo otra vez o escribe los datos a mano."))
       .finally(() => setScanning(false));
   }
 
@@ -1432,7 +1432,7 @@ function preprocessForOCR(file){
       </div>
 
       <p style={{textAlign:"center", fontSize:"10px", color:"var(--text-lo)", fontFamily:"'JetBrains Mono', monospace", margin:"18px 0 90px"}}>
-        v-cloud.4 · OCR mejorado
+        v-cloud.5
       </p>
 
       <div className="export-bar">
