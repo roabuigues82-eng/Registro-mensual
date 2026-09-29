@@ -353,19 +353,6 @@
     padding: 4px 0 4px 12px;
     line-height: 1;
   }
-  .ticket-edit {
-    background: none;
-    border: none;
-    color: #6b6555;
-    font-size: 15px;
-    cursor: pointer;
-    padding: 4px 0 4px 10px;
-    line-height: 1;
-  }
-  .ticket.editing {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
   .ticket-sub {
     display: flex;
     gap: 14px;
@@ -736,7 +723,6 @@ function App({ session }){
   const [exporting, setExporting] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState(null);
-  const [editingId, setEditingId] = useState(null);
   const [gestoriaEmail, setGestoriaEmail] = useState("");
   const [gestoriaSaved, setGestoriaSaved] = useState(true);
   const fileInputRef = useRef(null);
@@ -904,22 +890,6 @@ function App({ session }){
     setOtroVal("");
     setIvaRate('none');
     setScanNote(null);
-    setEditingId(null);
-  }
-
-  function startEdit(day, t){
-    const [y, m] = key.split("-");
-    setDateVal(`${y}-${m}-${day}`);
-    setEfectivoVal(t.efectivo ? String(t.efectivo) : "");
-    setTarjetaVal(t.tarjeta ? String(t.tarjeta) : "");
-    setOtroVal(t.otro ? String(t.otro) : "");
-    if (t.base4) { setIvaRate('4'); setShowIva(true); }
-    else if (t.base10) { setIvaRate('10'); setShowIva(true); }
-    else if (t.base21) { setIvaRate('21'); setShowIva(true); }
-    else { setIvaRate('none'); }
-    setEditingId(t.id);
-    setScanNote(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function saveEntry(e){
@@ -941,35 +911,21 @@ function App({ session }){
         base21,
       };
 
-      if (editingId) {
-        // No se modifica el registro original: se anula (registro enlazado) y se crea uno nuevo correcto
-        const { error: voidErr } = await sb.from('tickets').insert({
-          fecha: dateVal, efectivo: 0, tarjeta: 0, otro: 0, base4: null, base10: null, base21: null,
-          record_type: 'anulacion', refs_id: editingId,
+      const { data, error } = await sb.from('tickets').insert({ ...payload, record_type: 'alta' }).select().single();
+      if (error) throw error;
+      const [y, m, d] = dateVal.split("-");
+      const mkey = `${y}-${m}`;
+      const newTicket = { id: data.id, seq: data.seq_num, efectivo: payload.efectivo, tarjeta: payload.tarjeta, otro: payload.otro, base4: payload.base4, base10: payload.base10, base21: payload.base21 };
+      if (mkey === key) {
+        setEntries(prev => {
+          const updated = { ...(prev || {}) };
+          updated[d] = [...(updated[d] || []), newTicket];
+          return updated;
         });
-        if (voidErr) throw voidErr;
-        const { error: newErr } = await sb.from('tickets').insert({ ...payload, record_type: 'alta' });
-        if (newErr) throw newErr;
-        const grouped = await fetchMonth(key);
-        setEntries(grouped);
-        showToast("Cambios guardados");
+        showToast((entries && entries[d] ? entries[d].length + 1 : 1) > 1 ? "Ticket añadido" : "Guardado");
       } else {
-        const { data, error } = await sb.from('tickets').insert({ ...payload, record_type: 'alta' }).select().single();
-        if (error) throw error;
-        const [y, m, d] = dateVal.split("-");
-        const mkey = `${y}-${m}`;
-        const newTicket = { id: data.id, seq: data.seq_num, efectivo: payload.efectivo, tarjeta: payload.tarjeta, otro: payload.otro, base4: payload.base4, base10: payload.base10, base21: payload.base21 };
-        if (mkey === key) {
-          setEntries(prev => {
-            const updated = { ...(prev || {}) };
-            updated[d] = [...(updated[d] || []), newTicket];
-            return updated;
-          });
-          showToast((entries && entries[d] ? entries[d].length + 1 : 1) > 1 ? "Ticket añadido" : "Guardado");
-        } else {
-          setCursor(new Date(Number(y), Number(m) - 1, 1));
-          showToast("Guardado");
-        }
+        setCursor(new Date(Number(y), Number(m) - 1, 1));
+        showToast("Guardado");
       }
       resetForm();
     } catch (err) {
@@ -993,7 +949,6 @@ function App({ session }){
         if (filtered.length) updated[day] = filtered; else delete updated[day];
         return updated;
       });
-      if (editingId === id) resetForm();
     } catch (err) {
       showToast("Error al anular: " + (err.message || ""));
     }
@@ -1373,14 +1328,8 @@ function preprocessForOCR(file){
         )}
 
         <button className="btn-save" type="submit" disabled={saving}>
-          {saving ? "..." : (editingId ? "Guardar cambios" : "+ Añadir ticket")}
+          {saving ? "..." : "+ Añadir ticket"}
         </button>
-        {editingId && (
-          <button type="button" className="iva-toggle" style={{display:"block", textAlign:"center", width:"100%", marginTop:"8px"}}
-                  onClick={resetForm}>
-            Cancelar edición
-          </button>
-        )}
       </form>
 
       <p className="section-label">Este mes · ticket a ticket</p>
@@ -1397,7 +1346,7 @@ function preprocessForOCR(file){
           return tickets.map((t, i) => {
             const tot = Number(t.efectivo||0) + Number(t.tarjeta||0) + Number(t.otro||0);
             return (
-              <div className={"ticket" + (editingId === t.id ? " editing" : "")} key={t.id}>
+              <div className="ticket" key={t.id}>
                 <div className="ticket-top">
                   <div>
                     <div className="ticket-date">{day}/{m}/{y} <span style={{color:"var(--text-lo)", fontWeight:400}}>#{t.seq}</span></div>
@@ -1407,7 +1356,6 @@ function preprocessForOCR(file){
                   </div>
                   <div style={{display:"flex", alignItems:"center"}}>
                     <div className="ticket-amount">{fmtEUR(tot)}</div>
-                    <button className="ticket-edit" onClick={() => startEdit(day, t)} aria-label="Editar">✎</button>
                     <button className="ticket-del" onClick={() => deleteTicket(day, t.id)} aria-label="Anular">✕</button>
                   </div>
                 </div>
@@ -1440,7 +1388,7 @@ function preprocessForOCR(file){
       </div>
 
       <p style={{textAlign:"center", fontSize:"10px", color:"var(--text-lo)", fontFamily:"'JetBrains Mono', monospace", margin:"18px 0 90px"}}>
-        v-cloud.5
+        v-cloud.6
       </p>
 
       <div className="export-bar">
