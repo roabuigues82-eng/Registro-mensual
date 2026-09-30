@@ -760,6 +760,12 @@ function App({ session }){
   const [gestoriaEmail, setGestoriaEmail] = useState("");
   const [gestoriaPhone, setGestoriaPhone] = useState("");
   const [gestoriaSaved, setGestoriaSaved] = useState(true);
+  const [businessName, setBusinessName] = useState("");
+  const [cif, setCif] = useState("");
+  const businessNameRef = useRef("");
+  const cifRef = useRef("");
+  useEffect(() => { businessNameRef.current = businessName; }, [businessName]);
+  useEffect(() => { cifRef.current = cif; }, [cif]);
   const fileInputRef = useRef(null);
 
   const [access, setAccess] = useState('checking'); // 'checking' | 'ok' | 'locked'
@@ -800,9 +806,11 @@ function App({ session }){
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await sb.from('settings').select('gestoria_email, gestoria_phone').eq('user_id', session.user.id).maybeSingle();
+        const { data } = await sb.from('settings').select('gestoria_email, gestoria_phone, business_name, cif').eq('user_id', session.user.id).maybeSingle();
         if (data && data.gestoria_email) setGestoriaEmail(data.gestoria_email);
         if (data && data.gestoria_phone) setGestoriaPhone(data.gestoria_phone);
+        if (data && data.business_name) setBusinessName(data.business_name);
+        if (data && data.cif) setCif(data.cif);
       } catch (err) { /* sin bloquear la app si esto falla */ }
     })();
   }, []);
@@ -810,7 +818,7 @@ function App({ session }){
   async function saveGestoriaEmail(){
     setGestoriaSaved(true);
     try {
-      await sb.from('settings').upsert({ user_id: session.user.id, gestoria_email: gestoriaEmail.trim(), gestoria_phone: gestoriaPhone.trim(), updated_at: new Date().toISOString() });
+      await sb.from('settings').upsert({ user_id: session.user.id, gestoria_email: gestoriaEmail.trim(), gestoria_phone: gestoriaPhone.trim(), business_name: businessName.trim(), cif: cif.trim(), updated_at: new Date().toISOString() });
     } catch (err) {
       showToast("No se pudo guardar el email de la gestoría");
     }
@@ -865,11 +873,11 @@ function App({ session }){
       .order('fecha', { ascending: true })
       .order('created_at', { ascending: true });
     if (error) throw error;
-    const grouped = {};
+    const rowsByDate = {};
     activeRowsOnly(data).forEach(row => {
       const dateStr = String(row.fecha).slice(0, 10);
-      if (!grouped[dateStr]) grouped[dateStr] = [];
-      grouped[dateStr].push({
+      if (!rowsByDate[dateStr]) rowsByDate[dateStr] = [];
+      rowsByDate[dateStr].push({
         id: row.id,
         seq: row.seq_num,
         efectivo: Number(row.efectivo) || 0,
@@ -880,7 +888,22 @@ function App({ session }){
         base21: row.base21 === null || row.base21 === undefined ? null : Number(row.base21),
       });
     });
-    return grouped;
+    // Anulados: tickets que se dieron de baja en este rango, con los datos del ticket original
+    const byId = {};
+    (data || []).forEach(r => { if (r.record_type === 'alta') byId[r.id] = r; });
+    const voided = (data || [])
+      .filter(r => r.record_type === 'anulacion' && r.refs_id && byId[r.refs_id])
+      .map(r => {
+        const orig = byId[r.refs_id];
+        const tot = Number(orig.efectivo || 0) + Number(orig.tarjeta || 0) + Number(orig.otro || 0);
+        return {
+          seq: orig.seq_num,
+          fecha: orig.fecha,
+          total: Number(tot.toFixed(2)),
+          fechaAnulacion: r.fecha,
+        };
+      });
+    return { rowsByDate, voided };
   }
 
   function quarterKeyFromDate(d){
@@ -1012,13 +1035,21 @@ function App({ session }){
   const numDays = sortedDays.length;
   const avg = numDays ? totals.total / numDays : 0;
 
-  function buildQuarterWorkbook(qkey, rowsByDate){
+  function buildQuarterWorkbook(qkey, rowsByDate, meta){
     if (typeof XLSX === 'undefined') {
       throw new Error('No se pudo cargar la librería de Excel (revisa tu conexión a internet y recarga la página).');
     }
+    meta = meta || {};
     const dates = Object.keys(rowsByDate).sort();
     if (!dates.length) return null;
-    const rows = [];
+    const headerCols = ["Nº registro","Fecha","Día","Ticket #","Efectivo (€)","Tarjeta (€)","Otros (€)","Total (€)","Base IVA 4% (€)","Cuota IVA 4% (€)","Base IVA 10% (€)","Cuota IVA 10% (€)","Base IVA 21% (€)","Cuota IVA 21% (€)"];
+    const aoa = [];
+    if ((meta.businessName && meta.businessName.trim()) || (meta.cif && meta.cif.trim())) {
+      aoa.push([meta.businessName && meta.businessName.trim() ? `Comercio: ${meta.businessName.trim()}` : ""]);
+      aoa.push([meta.cif && meta.cif.trim() ? `CIF: ${meta.cif.trim()}` : ""]);
+      aoa.push([]);
+    }
+    aoa.push(headerCols);
     let t_efectivo = 0, t_tarjeta = 0, t_otro = 0, t_base4 = 0, t_base10 = 0, t_base21 = 0, t_cuota4 = 0, t_cuota10 = 0, t_cuota21 = 0;
     dates.forEach(dateStr => {
       const tickets = rowsByDate[dateStr];
@@ -1038,47 +1069,60 @@ function App({ session }){
         t_cuota4 += cuota4 || 0;
         t_cuota10 += cuota10 || 0;
         t_cuota21 += cuota21 || 0;
-        rows.push({
-          "Nº registro": t.seq,
-          "Fecha": `${dd}/${dm}/${dy}`,
-          "Día": DIAS[dateObj.getDay()],
-          "Ticket #": i + 1,
-          "Efectivo (€)": Number(t.efectivo || 0),
-          "Tarjeta (€)": Number(t.tarjeta || 0),
-          "Otros (€)": Number(t.otro || 0),
-          "Total (€)": Number(tot.toFixed(2)),
-          "Base IVA 4% (€)": t.base4 === null || t.base4 === undefined ? "" : Number(t.base4),
-          "Cuota IVA 4% (€)": cuota4 === null ? "" : cuota4,
-          "Base IVA 10% (€)": t.base10 === null || t.base10 === undefined ? "" : Number(t.base10),
-          "Cuota IVA 10% (€)": cuota10 === null ? "" : cuota10,
-          "Base IVA 21% (€)": t.base21 === null || t.base21 === undefined ? "" : Number(t.base21),
-          "Cuota IVA 21% (€)": cuota21 === null ? "" : cuota21,
-        });
+        aoa.push([
+          t.seq,
+          `${dd}/${dm}/${dy}`,
+          DIAS[dateObj.getDay()],
+          i + 1,
+          Number(t.efectivo || 0),
+          Number(t.tarjeta || 0),
+          Number(t.otro || 0),
+          Number(tot.toFixed(2)),
+          t.base4 === null || t.base4 === undefined ? "" : Number(t.base4),
+          cuota4 === null ? "" : cuota4,
+          t.base10 === null || t.base10 === undefined ? "" : Number(t.base10),
+          cuota10 === null ? "" : cuota10,
+          t.base21 === null || t.base21 === undefined ? "" : Number(t.base21),
+          cuota21 === null ? "" : cuota21,
+        ]);
       });
     });
-    rows.push({
-      "Nº registro": "", "Fecha": "", "Día": "", "Ticket #": "TOTAL",
-      "Efectivo (€)": Number(t_efectivo.toFixed(2)),
-      "Tarjeta (€)": Number(t_tarjeta.toFixed(2)),
-      "Otros (€)": Number(t_otro.toFixed(2)),
-      "Total (€)": Number((t_efectivo + t_tarjeta + t_otro).toFixed(2)),
-      "Base IVA 4% (€)": Number(t_base4.toFixed(2)),
-      "Cuota IVA 4% (€)": Number(t_cuota4.toFixed(2)),
-      "Base IVA 10% (€)": Number(t_base10.toFixed(2)),
-      "Cuota IVA 10% (€)": Number(t_cuota10.toFixed(2)),
-      "Base IVA 21% (€)": Number(t_base21.toFixed(2)),
-      "Cuota IVA 21% (€)": Number(t_cuota21.toFixed(2)),
-    });
-    const ws = XLSX.utils.json_to_sheet(rows);
+    aoa.push([
+      "", "", "", "TOTAL",
+      Number(t_efectivo.toFixed(2)),
+      Number(t_tarjeta.toFixed(2)),
+      Number(t_otro.toFixed(2)),
+      Number((t_efectivo + t_tarjeta + t_otro).toFixed(2)),
+      Number(t_base4.toFixed(2)),
+      Number(t_cuota4.toFixed(2)),
+      Number(t_base10.toFixed(2)),
+      Number(t_cuota10.toFixed(2)),
+      Number(t_base21.toFixed(2)),
+      Number(t_cuota21.toFixed(2)),
+    ]);
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols'] = [{wch:11},{wch:12},{wch:7},{wch:9},{wch:13},{wch:13},{wch:11},{wch:12},{wch:15},{wch:15},{wch:16},{wch:16},{wch:16},{wch:16}];
     const wb = XLSX.utils.book_new();
     const sheetName = qkey.replace("-", " ");
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+    const voided = meta.voided || [];
+    if (voided.length) {
+      const vAoa = [["Nº registro","Fecha del ticket","Importe (€)","Fecha de anulación"]];
+      voided.forEach(v => {
+        const [vy, vm, vd] = String(v.fecha).slice(0,10).split("-");
+        const [ay, am, ad] = String(v.fechaAnulacion).slice(0,10).split("-");
+        vAoa.push([v.seq, `${vd}/${vm}/${vy}`, v.total, `${ad}/${am}/${ay}`]);
+      });
+      const wsV = XLSX.utils.aoa_to_sheet(vAoa);
+      wsV['!cols'] = [{wch:11},{wch:16},{wch:12},{wch:18}];
+      XLSX.utils.book_append_sheet(wb, wsV, "Anulados");
+    }
     return wb;
   }
 
-  function buildExcelForQuarter(qkey, rowsByDate){
-    const wb = buildQuarterWorkbook(qkey, rowsByDate);
+  function buildExcelForQuarter(qkey, rowsByDate, meta){
+    const wb = buildQuarterWorkbook(qkey, rowsByDate, meta);
     if (!wb) return false;
     const filename = `resumen_ventas_${qkey}.xlsx`;
     try {
@@ -1112,8 +1156,8 @@ function App({ session }){
     try {
       const qkey = quarterKeyFromDate(cursor);
       const { first, last } = quarterInfo(qkey);
-      const rowsByDate = await fetchRange(first, last);
-      const ok = buildExcelForQuarter(qkey, rowsByDate);
+      const { rowsByDate, voided } = await fetchRange(first, last);
+      const ok = buildExcelForQuarter(qkey, rowsByDate, { businessName, cif, voided });
       if (ok) {
         await markExported(qkey);
         showToast("Excel del trimestre generado");
@@ -1134,8 +1178,8 @@ function App({ session }){
     try {
       const qkey = quarterKeyFromDate(cursor);
       const { first, last, label } = quarterInfo(qkey);
-      const rowsByDate = await fetchRange(first, last);
-      const wb = buildQuarterWorkbook(qkey, rowsByDate);
+      const { rowsByDate, voided } = await fetchRange(first, last);
+      const wb = buildQuarterWorkbook(qkey, rowsByDate, { businessName, cif, voided });
       if (!wb) {
         showToast("No hay tickets en ese trimestre.");
         return;
@@ -1176,9 +1220,9 @@ function App({ session }){
         const already = await isExported(prevQkey);
         if (already) return;
         const { first, last } = quarterInfo(prevQkey);
-        const rowsByDate = await fetchRange(first, last);
+        const { rowsByDate, voided } = await fetchRange(first, last);
         if (!Object.keys(rowsByDate).length) return;
-        const ok = buildExcelForQuarter(prevQkey, rowsByDate);
+        const ok = buildExcelForQuarter(prevQkey, rowsByDate, { businessName: businessNameRef.current, cif: cifRef.current, voided });
         if (ok) {
           await markExported(prevQkey);
           showToast(`Resumen de ${prevQkey.replace("-", " ")} descargado automáticamente`);
@@ -1444,6 +1488,21 @@ function preprocessForOCR(file){
       )}
 
       <div className="gestoria-box">
+        <label htmlFor="f-business-name" className="gestoria-label">Nombre del comercio</label>
+        <input id="f-business-name" type="text" placeholder="Ej: Bar Restaurante Calpe S.L."
+               value={businessName}
+               onChange={e => { setBusinessName(e.target.value); setGestoriaSaved(false); }}
+               onBlur={() => { if (!gestoriaSaved) saveGestoriaEmail(); }} />
+
+        <label htmlFor="f-cif" className="gestoria-label" style={{marginTop:"12px"}}>CIF</label>
+        <input id="f-cif" type="text" placeholder="B12345678"
+               value={cif}
+               onChange={e => { setCif(e.target.value); setGestoriaSaved(false); }}
+               onBlur={() => { if (!gestoriaSaved) saveGestoriaEmail(); }} />
+        <p style={{fontSize:"11px", color:"var(--text-lo)", margin:"6px 0 12px"}}>
+          Aparecerán en la cabecera del Excel que recibe tu gestoría.
+        </p>
+
         <label htmlFor="f-gestoria" className="gestoria-label">Email de tu gestoría</label>
         <input id="f-gestoria" type="email" placeholder="gestoria@ejemplo.com"
                value={gestoriaEmail}
@@ -1480,7 +1539,7 @@ function preprocessForOCR(file){
       </div>
 
       <p style={{textAlign:"center", fontSize:"10px", color:"var(--text-lo)", fontFamily:"'JetBrains Mono', monospace", margin:"18px 0 90px"}}>
-        v-cloud.11
+        v-cloud.12
       </p>
 
       <div className="export-bar">
