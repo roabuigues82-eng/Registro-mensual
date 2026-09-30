@@ -208,18 +208,34 @@
   .pricing {
     padding: 20px 0 60px;
   }
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  @media (max-width: 560px) {
+    .pricing-grid { grid-template-columns: 1fr; }
+  }
   .price-card {
     background: linear-gradient(160deg, var(--accent-dim), var(--ink-soft));
     border: 1px solid var(--rule);
     border-radius: 20px;
-    padding: 36px 28px;
+    padding: 30px 22px;
     text-align: center;
-    max-width: 360px;
-    margin: 0 auto;
+  }
+  .price-card-highlight {
+    border-color: var(--accent);
+  }
+  .price-sub {
+    font-size: 12px;
+    color: var(--text-lo);
+    margin: 2px 0 0;
   }
   .price-card .amount {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 44px;
+    font-size: 40px;
     font-weight: 800;
     margin: 6px 0 2px;
   }
@@ -312,21 +328,36 @@
 
     <section class="pricing">
       <p class="section-title">Precio</p>
-      <div class="price-card">
-        <div class="trial">PRIMER MES GRATIS</div>
-        <div class="amount">15€<span> /mes</span></div>
-        <ul class="price-list">
-          <li>Tickets ilimitados</li>
-          <li>Escáner con cámara</li>
-          <li>Exportación a Excel automática</li>
-          <li>Desglose de IVA 10% / 21%</li>
-        </ul>
-        <a class="btn-primary" href="app.html" style="width:100%; display:block;">Empezar ahora</a>
+      <p style="text-align:center; font-size:13px; color:var(--text-lo); margin:-18px 0 24px;">Primer mes gratis con cualquier plan</p>
+      <div class="pricing-grid">
+        <div class="price-card">
+          <div class="amount">14,90€<span> /mes</span></div>
+          <ul class="price-list">
+            <li>Tickets ilimitados</li>
+            <li>Escáner con cámara</li>
+            <li>Exportación a Excel automática</li>
+            <li>Desglose de IVA 4% / 10% / 21%</li>
+          </ul>
+          <a class="btn-primary" href="app.html" style="width:100%; display:block;">Empezar ahora</a>
+        </div>
+        <div class="price-card price-card-highlight">
+          <div class="trial">AHORRA MÁS</div>
+          <div class="amount">9,50€<span> /mes</span></div>
+          <p class="price-sub">114€ facturados una vez al año</p>
+          <ul class="price-list">
+            <li>Tickets ilimitados</li>
+            <li>Escáner con cámara</li>
+            <li>Exportación a Excel automática</li>
+            <li>Desglose de IVA 4% / 10% / 21%</li>
+          </ul>
+          <a class="btn-primary" href="app.html" style="width:100%; display:block;">Empezar ahora</a>
+        </div>
       </div>
     </section>
 
     <footer>
       © 2026 Caja · <a href="app.html" style="color:var(--text-lo);">Entrar</a>
+      <div style="margin-top:6px; font-size:10px; opacity:0.35;">v-landing.2</div>
     </footer>
   </div>
 </body>
