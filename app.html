@@ -1172,6 +1172,21 @@ function App({ session }){
     }
   }
 
+  function quarterEmailBody(label){
+    const lines = ["Hola,", ""];
+    if ((businessName && businessName.trim()) || (cif && cif.trim())) {
+      let identLine = "Te mando el resumen de ventas";
+      if (businessName && businessName.trim()) identLine += ` de ${businessName.trim()}`;
+      if (cif && cif.trim()) identLine += ` (CIF ${cif.trim()})`;
+      identLine += `, trimestre ${label}.`;
+      lines.push(identLine);
+    } else {
+      lines.push(`Adjunto el resumen de ventas del trimestre ${label}.`);
+    }
+    lines.push("", "Un saludo.");
+    return lines.join("\n");
+  }
+
   async function sendQuarterByEmail(){
     if (!gestoriaEmail.trim()) return;
     setSendingEmail(true);
@@ -1189,7 +1204,7 @@ function App({ session }){
         body: {
           to: gestoriaEmail.trim(),
           subject: `Resumen de ventas ${qkey.replace('-', ' ')}`,
-          text: `Hola,\n\nAdjunto el resumen de ventas del trimestre ${label}.\n\nUn saludo.`,
+          text: quarterEmailBody(label),
           filename: `resumen_ventas_${qkey}.xlsx`,
           contentBase64: base64,
         },
@@ -1516,7 +1531,7 @@ function preprocessForOCR(file){
         )}
         {gestoriaEmail.trim() && (
           <a className="mailto-btn" style={{opacity:0.75}}
-             href={`mailto:${gestoriaEmail.trim()}?subject=${encodeURIComponent('Resumen de ventas ' + quarterKeyFromDate(cursor).replace('-', ' '))}&body=${encodeURIComponent('Hola,\n\nAdjunto el resumen de ventas del trimestre ' + quarterInfo(quarterKeyFromDate(cursor)).label + '.\n\nUn saludo.')}`}>
+             href={`mailto:${gestoriaEmail.trim()}?subject=${encodeURIComponent('Resumen de ventas ' + quarterKeyFromDate(cursor).replace('-', ' '))}&body=${encodeURIComponent(quarterEmailBody(quarterInfo(quarterKeyFromDate(cursor)).label))}`}>
             📧 O ábrelo tú en tu correo (adjuntas tú)
           </a>
         )}
@@ -1539,7 +1554,7 @@ function preprocessForOCR(file){
       </div>
 
       <p style={{textAlign:"center", fontSize:"10px", color:"var(--text-lo)", fontFamily:"'JetBrains Mono', monospace", margin:"18px 0 90px"}}>
-        v-cloud.12
+        v-cloud.13
       </p>
 
       <div className="export-bar">
